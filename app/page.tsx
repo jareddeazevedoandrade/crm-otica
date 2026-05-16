@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type Cliente = {
   id: number;
@@ -11,6 +12,7 @@ type Cliente = {
 };
 
 export default function CRM() {
+  
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [filtro, setFiltro] = useState("todos");
   const [editandoId, setEditandoId] = useState<number | null>(null);
@@ -21,19 +23,43 @@ export default function CRM() {
   const [telefone, setTelefone] = useState("");
   const [pesquisa, setPesquisa] = useState("");
 
+  useEffect(() => {
+  async function testarConexao() {
+    const { data, error } = await supabase
+      .from("clientes")
+      .select("*");
+
+    console.log("DADOS:", data);
+    console.log("ERRO:", error);
+  }
+
+  testarConexao();
+}, []);
+
   const [mostrarLista, setMostrarLista] = useState(false);
 
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const [diaSelecionado, setDiaSelecionado] = useState<number | null>(null);
 
   useEffect(() => {
-    const data = localStorage.getItem("clientes-otica");
-    if (data) setClientes(JSON.parse(data));
-  }, []);
+  async function carregarClientes() {
+    const { data, error } = await supabase
+      .from("clientes")
+      .select("*")
+      .order("id", { ascending: false });
 
-  useEffect(() => {
-    localStorage.setItem("clientes-otica", JSON.stringify(clientes));
-  }, [clientes]);
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    setClientes(data || []);
+  }
+
+  carregarClientes();
+}, []);
+
+
 
   function formatarData(valor: string) {
     const n = valor.replace(/\D/g, "").slice(0, 8);
@@ -57,26 +83,61 @@ export default function CRM() {
     setEditandoId(null);
   }
 
-  function salvar() {
-    if (!nome || !nascimento || !receita || !telefone) return;
+  async function salvar() {
+  if (!nome || !nascimento || !receita || !telefone) return;
 
-    if (editandoId) {
-      setClientes((prev) =>
-        prev.map((c) =>
-          c.id === editandoId ? { ...c, nome, nascimento, receita, telefone } : c
-        )
-      );
-      limpar();
+  // EDITAR
+  if (editandoId) {
+    const { error } = await supabase
+      .from("clientes")
+      .update({
+        nome,
+        nascimento,
+        receita,
+        telefone,
+      })
+      .eq("id", editandoId);
+
+    if (error) {
+      console.log(error);
       return;
     }
 
-    setClientes((prev) => [
-      ...prev,
-      { id: Date.now(), nome, nascimento, receita, telefone },
-    ]);
+    setClientes((prev) =>
+      prev.map((c) =>
+        c.id === editandoId
+          ? { ...c, nome, nascimento, receita, telefone }
+          : c
+      )
+    );
 
     limpar();
+    return;
   }
+
+  // ADICIONAR
+  const { data, error } = await supabase
+    .from("clientes")
+    .insert([
+      {
+        nome,
+        nascimento,
+        receita,
+        telefone,
+      },
+    ])
+    .select();
+
+  console.log(data, error);
+
+  if (error) return;
+
+  if (data) {
+    setClientes((prev) => [...prev, ...data]);
+  }
+
+  limpar();
+}
 
   function editar(c: Cliente) {
     setEditandoId(c.id);
@@ -86,10 +147,18 @@ export default function CRM() {
     setTelefone(c.telefone);
   }
 
-  function excluir(id: number) {
-    if (!confirm("Deseja realmente excluir este cliente?")) return;
-    setClientes((prev) => prev.filter((c) => c.id !== id));
-  }
+  async function excluir(id: number) {
+  if (!confirm("Deseja realmente excluir este cliente?")) return;
+
+  // REMOVE DO SUPABASE
+  await supabase
+    .from("clientes")
+    .delete()
+    .eq("id", id);
+
+  // REMOVE DA TELA
+  setClientes((prev) => prev.filter((c) => c.id !== id));
+}
 
   function verificarAniversario(data: string) {
     const p = data.split("/");
