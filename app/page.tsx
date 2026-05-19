@@ -77,16 +77,44 @@ export default function CRM() {
   }, []);
 
   useEffect(() => {
-    async function carregarClientes() {
+    async function carregarDados() {
       if (!session) return;
-      const { data, error } = await supabase.from("clientes").select("*");
-      if (error) {
-        alert("Erro ao buscar clientes: " + error.message);
+      
+      // 1. Carregar Clientes
+      const { data: clientesData, error: clientesError } = await supabase.from("clientes").select("*");
+      if (clientesError) {
+        alert("Erro ao buscar clientes: " + clientesError.message);
         return;
       }
-      setClientes(Array.isArray(data) ? data : []);
+      setClientes(Array.isArray(clientesData) ? clientesData : []);
+
+      // 2. Carregar Status das Checkboxes (Persistência)
+      const { data: statusData, error: statusError } = await supabase.from("cliente_status_envio").select("*");
+      if (statusError) {
+        console.error("Erro ao buscar status de envio:", statusError.message);
+        return;
+      }
+
+      if (statusData) {
+        const novoStatusEnvio: Record<number, { aniversarioNoDia: boolean; receitaNoDia: boolean }> = {};
+        const novoStatusIndependente: Record<number, { aniversarioMes: boolean; receitaAntecipada: boolean }> = {};
+
+        statusData.forEach((item: any) => {
+          const cid = item.cliente_id;
+          if (item.tipo_envio === "aniversarioNoDia" || item.tipo_envio === "receitaNoDia") {
+            if (!novoStatusEnvio[cid]) novoStatusEnvio[cid] = { aniversarioNoDia: false, receitaNoDia: false };
+            novoStatusEnvio[cid][item.tipo_envio as "aniversarioNoDia" | "receitaNoDia"] = item.status;
+          } else if (item.tipo_envio === "aniversarioMes" || item.tipo_envio === "receitaAntecipada") {
+            if (!novoStatusIndependente[cid]) novoStatusIndependente[cid] = { aniversarioMes: false, receitaAntecipada: false };
+            novoStatusIndependente[cid][item.tipo_envio as "aniversarioMes" | "receitaAntecipada"] = item.status;
+          }
+        });
+
+        setStatusEnvio(novoStatusEnvio);
+        setStatusEnvioIndependente(novoStatusIndependente);
+      }
     }
-    carregarClientes();
+    carregarDados();
   }, [session]);
 
   const formatarData = (valor: string) => {
@@ -277,17 +305,31 @@ export default function CRM() {
     window.open(`https://api.whatsapp.com/send?phone=55${n}&text=${encodeURIComponent(msg)}`, "_blank");
   };
 
+  // FUNÇÃO PARA PERSISTIR NO SUPABASE
+  const atualizarStatusNoSupabase = async (clienteId: number, tipoEnvio: string, novoStatus: boolean) => {
+    await supabase
+      .from('cliente_status_envio')
+      .upsert(
+        { cliente_id: clienteId, tipo_envio: tipoEnvio, status: novoStatus },
+        { onConflict: 'cliente_id, tipo_envio' }
+      );
+  };
+
   const marcarEnviado = (id: number, tipo: "aniversarioNoDia" | "receitaNoDia") => {
     setStatusEnvio((prev) => {
       const statusAtual = prev[id] || { aniversarioNoDia: false, receitaNoDia: false };
-      return { ...prev, [id]: { ...statusAtual, [tipo]: !statusAtual[tipo] } };
+      const novoStatus = !statusAtual[tipo];
+      atualizarStatusNoSupabase(id, tipo, novoStatus);
+      return { ...prev, [id]: { ...statusAtual, [tipo]: novoStatus } };
     });
   };
 
   const marcarEnviadoIndependente = (id: number, tipo: "aniversarioMes" | "receitaAntecipada") => {
     setStatusEnvioIndependente((prev) => {
       const statusAtual = prev[id] || { aniversarioMes: false, receitaAntecipada: false };
-      return { ...prev, [id]: { ...statusAtual, [tipo]: !statusAtual[tipo] } };
+      const novoStatus = !statusAtual[tipo];
+      atualizarStatusNoSupabase(id, tipo, novoStatus);
+      return { ...prev, [id]: { ...statusAtual, [tipo]: novoStatus } };
     });
   };
 
@@ -377,128 +419,98 @@ export default function CRM() {
     </svg>
   );
 
+  if (loadingSession) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
+  }
+
   if (!session) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 p-10">
-          <div className="flex flex-col items-center mb-8">
-            <div className="relative w-24 h-24 mb-4">
-              <div className="absolute inset-0 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg">L</div>
-              <Image src="/logolider1.1.png" alt="Logo" fill className="object-contain z-10" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-4">
+              <img src="/logo.png" alt="Logo" style={{ width: '120px', height: '120px', objectFit: 'contain' }} />
             </div>
             <h1 className="text-2xl font-bold text-slate-900">Ótica Líder CRM</h1>
-            <p className="text-slate-500 text-sm mt-1">Gestão Inteligente de Clientes</p>
+            <p className="text-slate-500 mt-2">Faça login para acessar o sistema</p>
           </div>
-          <div className="auth-container">
-            <Auth
-              supabaseClient={supabase}
-              appearance={{
-                theme: ThemeSupa,
-                variables: {
-                  default: {
-                    colors: {
-                      brand: "#4f46e5",
-                      brandAccent: "#4338ca",
-                    },
-                  },
+          <Auth
+            supabaseClient={supabase}
+            appearance={{ theme: ThemeSupa }}
+            providers={[]}
+            localization={{
+              variables: {
+                sign_in: {
+                  email_label: "Email",
+                  password_label: "Senha",
+                  button_label: "Entrar",
+                  loading_button_label: "Entrando...",
+                  email_input_placeholder: "Seu email",
+                  password_input_placeholder: "Sua senha",
                 },
-              }}
-              providers={[]}
-            />
-          </div>
+              },
+            }}
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex text-slate-900 font-sans">
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
-        <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-          <div className="relative w-10 h-10">
-            <div className="absolute inset-0 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-md">L</div>
-            <Image src="/logolider1.1.png" alt="Logo" fill className="object-contain z-10" />
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
+      {/* HEADER */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Ótica Líder <span className="text-indigo-600">CRM</span></h1>
           </div>
-          <div>
-            <h2 className="font-bold text-slate-900 leading-tight">Ótica Líder</h2>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Enterprise CRM</p>
-          </div>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          <button onClick={() => setAbaAtiva("dashboard")} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${abaAtiva === "dashboard" ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
-            <span>📊</span> Dashboard
-          </button>
-          <button onClick={() => setAbaAtiva("clientes")} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${abaAtiva === "clientes" ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
-            <span>👥</span> Clientes
-          </button>
-          <button onClick={() => setAbaAtiva("calendario")} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${abaAtiva === "calendario" ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
-            <span>📅</span> Calendário
-          </button>
-        </nav>
-
-        <div className="p-4 border-t border-slate-100">
-          <div className="flex items-center gap-3 p-2 mb-3">
-            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 uppercase">
-              {session.user.email?.substring(0, 2)}
-            </div>
-            <div className="overflow-hidden">
-              <p className="text-xs font-semibold text-slate-900 truncate">{session.user.email}</p>
-              <p className="text-[10px] text-slate-400">Administrador</p>
-            </div>
-          </div>
-          <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 transition-colors">Sair do Sistema</button>
-        </div>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-40">
-          <h1 className="text-lg font-bold text-slate-900 capitalize">{abaAtiva}</h1>
           <div className="flex items-center gap-4">
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔎</span>
-              <input 
-                type="text" 
-                placeholder="Pesquisar cliente..." 
-                value={pesquisa}
-                onChange={(e) => { setPesquisa(e.target.value); if(abaAtiva !== "clientes") setAbaAtiva("clientes"); }}
-                className="pl-9 pr-4 py-1.5 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-indigo-500 w-64 transition-all"
-              />
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+              <span className="text-xs font-medium text-slate-600">{session.user.email}</span>
             </div>
+            <button onClick={() => supabase.auth.signOut()} className="text-sm font-bold text-slate-500 hover:text-red-600 transition-colors">Sair</button>
           </div>
-        </header>
+        </div>
+      </header>
 
-        <div className="p-8 overflow-y-auto">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* NAVEGAÇÃO */}
+        <div className="flex flex-wrap gap-2 mb-8">
+          <button onClick={() => setAbaAtiva("dashboard")} className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all ${abaAtiva === "dashboard" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}>Dashboard</button>
+          <button onClick={() => setAbaAtiva("clientes")} className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all ${abaAtiva === "clientes" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}>Base de Clientes</button>
+          <button onClick={() => setAbaAtiva("calendario")} className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all ${abaAtiva === "calendario" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}>Calendário</button>
+        </div>
+
+        <div className="space-y-8">
           {abaAtiva === "dashboard" && (
-            <div className="space-y-8">
-              {/* STATS */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-5">
-                  <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center text-xl">👥</div>
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {/* CARDS DE RESUMO */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-xl">👥</div>
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Clientes</p>
-                    <p className="text-2xl font-bold text-slate-900">{totalClientes}</p>
+                    <p className="text-sm font-bold text-slate-400 uppercase">Total de Clientes</p>
+                    <p className="text-2xl font-black text-slate-900">{totalClientes}</p>
                   </div>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-5">
-                  <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center text-xl">🎉</div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 text-xl">🎂</div>
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Aniversariantes (Mês)</p>
-                    <p className="text-2xl font-bold text-slate-900">{aniversariantesMesCount}</p>
+                    <p className="text-sm font-bold text-slate-400 uppercase">Aniversários (Mês)</p>
+                    <p className="text-2xl font-black text-slate-900">{aniversariantesMesCount}</p>
                   </div>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-5">
-                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center text-xl">🚨</div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center text-red-600 text-xl">🚨</div>
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Receitas Vencidas</p>
-                    <p className="text-2xl font-bold text-slate-900">{receitasVencidasCount}</p>
+                    <p className="text-sm font-bold text-slate-400 uppercase">Receitas Vencidas</p>
+                    <p className="text-2xl font-black text-slate-900">{receitasVencidasCount}</p>
                   </div>
                 </div>
               </div>
 
-              {/* QUICK ACTION / ALERTS */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                   <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2">
@@ -599,6 +611,17 @@ export default function CRM() {
                   <option value="receita_hoje">Receita hoje</option>
                   <option value="receitas_vencidas">Receitas Vencidas</option>
                 </select>
+
+                <div className="flex-1 min-w-[300px] relative">
+                  <input 
+                    type="text" 
+                    placeholder="Pesquisar cliente..." 
+                    value={pesquisa} 
+                    onChange={(e) => setPesquisa(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                  <svg className="absolute left-3 top-2.5 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
