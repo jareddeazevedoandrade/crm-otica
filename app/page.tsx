@@ -42,6 +42,7 @@ export default function CRM() {
 
   const [diaSelecionado, setDiaSelecionado] = useState<number | null>(null);
   const [abaAtiva, setAbaAtiva] = useState<"dashboard" | "clientes" | "calendario">("dashboard");
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc'); // 'asc' para crescente, 'desc' para decrescente
 
   useEffect(() => {
     const emailsPermitidos = [
@@ -191,15 +192,84 @@ export default function CRM() {
     return dias !== null && dias > 365;
   };
 
-  // MENSAGENS WHATSAPP
-  const getMsgAniversario = (nomeCompleto: string) => {
+  // FUNÇÃO PARA FORMATAR TEMPO DECORRIDO
+  const formatarTempoDecorrido = (dias: number): string => {
+    if (dias < 30) {
+      return `${dias} dias`;
+    } else if (dias < 365) {
+      const meses = Math.floor(dias / 30);
+      return `${meses} ${meses === 1 ? 'mês' : 'meses'}`;
+    } else {
+      const anos = Math.floor(dias / 365);
+      const diasRestantes = dias % 365;
+      const meses = Math.floor(diasRestantes / 30);
+      if (meses === 0) {
+        return `${anos} ${anos === 1 ? 'ano' : 'anos'}`;
+      }
+      return `${anos} ${anos === 1 ? 'ano' : 'anos'} e ${meses} ${meses === 1 ? 'mês' : 'meses'}`;
+    }
+  };
+
+  // MENSAGENS WHATSAPP ATUALIZADAS
+  const getMsgAniversarioHoje = (nomeCompleto: string) => {
+    const primeiroNome = nomeCompleto.split(" ")[0];
+    return `🎉 ${primeiroNome}, ANIVERSARIANTE DO DIA TEM PRESENTE! 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 25% OFF em qualquer produto da loja!\n\nSeu cupom: ANIVERSARIO25\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`;
+  };
+
+  const getMsgAniversarioMes = (nomeCompleto: string) => {
     const primeiroNome = nomeCompleto.split(" ")[0];
     return `🎉 ${primeiroNome}, ANIVERSARIANTE DO MÊS TEM PRESENTE! 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 20% OFF em qualquer produto da loja!\n\nSeu cupom: ANIVERSARIO20\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`;
   };
 
-  const getMsgReceita = (nomeCompleto: string) => {
+  const getMsgReceitaHoje = (nomeCompleto: string) => {
     const primeiroNome = nomeCompleto.split(" ")[0];
-    return `🚨 ${primeiroNome}, sua receita está vencida! 👀\n\nPassando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nE aproveitando: a Ótica Líder está com uma Mega Promoção 🔥\n\nGostaria que eu marcasse uma data para seu exame? 😄`;
+    return `🚨 ${primeiroNome}, SUA RECEITA VENCEU HOJE! 👀\n\nPassando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nE aproveitando: a Ótica Líder está com uma Mega Promoção 🔥\n\nGostaria que eu marcasse uma data para seu exame? 😄`;
+  };
+
+  const getMsgReceitaVencida = (nomeCompleto: string, diasVencidos: number) => {
+    const primeiroNome = nomeCompleto.split(" ")[0];
+    const tempoFormatado = formatarTempoDecorrido(diasVencidos);
+    return `🚨 ${primeiroNome}, SUA RECEITA VENCEU HÁ ${tempoFormatado.toUpperCase()}! 👀\n\nPassando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nE aproveitando: a Ótica Líder está com uma Mega Promoção 🔥\n\nGostaria que eu marcasse uma data para seu exame? 😄`;
+  };
+
+  const getMsgReceitaProximaVencer = (nomeCompleto: string, diasFaltando: number) => {
+    const primeiroNome = nomeCompleto.split(" ")[0];
+    return `🚨 ${primeiroNome}, SUA RECEITA VENCE EM ${diasFaltando} DIAS! 👀\n\nPassando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nE aproveitando: a Ótica Líder está com uma Mega Promoção 🔥\n\nGostaria que eu marcasse uma data para seu exame? 😄`;
+  };
+
+  // FUNÇÃO PARA OBTER A MENSAGEM CORRETA BASEADA NO STATUS
+  const getMsgReceita = (nomeCompleto: string, dataReceita: string) => {
+    const dias = diasPassadosReceita(dataReceita);
+    if (dias === null) return "";
+
+    const d = parseData(dataReceita);
+    const isMesmoDiaEMes = d && d.dia === diaHoje && d.mes === mesHoje;
+
+    // Receita vence hoje
+    if (isMesmoDiaEMes && dias >= 365) {
+      return getMsgReceitaHoje(nomeCompleto);
+    }
+
+    // Receita vencida (passou de 365 dias)
+    if (dias > 365) {
+      return getMsgReceitaVencida(nomeCompleto, dias - 365);
+    }
+
+    // Receita prestes a vencer (350-365 dias)
+    if (dias > 350 && dias < 365) {
+      const diasFaltando = 365 - dias;
+      return getMsgReceitaProximaVencer(nomeCompleto, diasFaltando);
+    }
+
+    return "";
+  };
+
+  // FUNÇÃO PARA OBTER A MENSAGEM DE ANIVERSÁRIO CORRETA
+  const getMsgAniversario = (nomeCompleto: string, data: string) => {
+    if (isAniversarioHoje(data)) {
+      return getMsgAniversarioHoje(nomeCompleto);
+    }
+    return getMsgAniversarioMes(nomeCompleto);
   };
 
   const whatsapp = (numero: string, msg = "") => {
@@ -225,32 +295,70 @@ export default function CRM() {
   const getStatusInd = (id: number) => statusEnvioIndependente[id] || { aniversarioMes: false, receitaAntecipada: false };
 
   const filtrados = useMemo(() => {
-    let lista = clientes;
-    if (filtro === "aniv_mes") lista = lista.filter((c) => isAniversarioMes(c.nascimento));
-    if (filtro === "aniv_hoje") lista = lista.filter((c) => isAniversarioHoje(c.nascimento));
-    if (filtro === "receitas_vencer") lista = lista.filter((c) => isReceitaParaVencer(c.receita) && !isReceitaVencidaTotal(c.receita));
-    if (filtro === "receita_hoje") lista = lista.filter((c) => isReceitaHoje(c.receita));
-    if (filtro === "receitas_vencidas") lista = lista.filter((c) => isReceitaVencidaTotal(c.receita));
-    
-    if (pesquisa.trim()) lista = lista.filter((c) => c.nome.toLowerCase().includes(pesquisa.toLowerCase()));
+  let lista = [...clientes];
 
-    // Lógica de ordenação
-    if (filtro === "aniv_mes" || filtro === "aniv_hoje") {
-      lista.sort((a, b) => {
-        const diaA = parseData(a.nascimento)?.dia || 0;
-        const diaB = parseData(b.nascimento)?.dia || 0;
-        return diaA - diaB;
-      });
-    } else if (filtro === "receitas_vencer" || filtro === "receita_hoje" || filtro === "receitas_vencidas") {
-      lista.sort((a, b) => {
-        const diasA = diasPassadosReceita(a.receita) || 0;
-        const diasB = diasPassadosReceita(b.receita) || 0;
-        return diasA - diasB;
-      });
+  // FILTROS
+  if (filtro === "aniv_mes") {
+    lista = lista.filter((c) => isAniversarioMes(c.nascimento));
+  }
+
+  if (filtro === "aniv_hoje") {
+    lista = lista.filter((c) => isAniversarioHoje(c.nascimento));
+  }
+
+  if (filtro === "receitas_vencer") {
+    lista = lista.filter(
+      (c) => isReceitaParaVencer(c.receita) && !isReceitaVencidaTotal(c.receita)
+    );
+  }
+
+  if (filtro === "receita_hoje") {
+    lista = lista.filter((c) => isReceitaHoje(c.receita));
+  }
+
+  if (filtro === "receitas_vencidas") {
+    lista = lista.filter((c) => isReceitaVencidaTotal(c.receita));
+  }
+
+  if (pesquisa.trim()) {
+    lista = lista.filter((c) =>
+      c.nome.toLowerCase().includes(pesquisa.toLowerCase())
+    );
+  }
+
+  // 🔥 VALOR PADRÃO DE ORDENAÇÃO (IMPORTANTE)
+  const getSortValue = (c: Cliente) => {
+    if (filtro.includes("aniv")) {
+      const d = parseData(c.nascimento);
+      return d ? d.dia + d.mes * 100 : 0;
     }
 
-    return lista;
-  }, [clientes, filtro, pesquisa]);
+    if (filtro.includes("receita")) {
+      return diasPassadosReceita(c.receita) || 0;
+    }
+
+    // padrão geral (nome)
+    return c.nome.toLowerCase();
+  };
+
+  // SORT GLOBAL (FUNCIONA SEMPRE)
+  lista.sort((a, b) => {
+    const valA = getSortValue(a);
+    const valB = getSortValue(b);
+
+    if (typeof valA === "string" && typeof valB === "string") {
+      return sortOrder === "asc"
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    }
+
+    return sortOrder === "asc"
+      ? Number(valA) - Number(valB)
+      : Number(valB) - Number(valA);
+  });
+
+  return lista;
+}, [clientes, filtro, pesquisa, sortOrder]);
 
   const totalClientes = clientes.length;
   const aniversariantesMesCount = clientes.filter((c) => isAniversarioMes(c.nascimento)).length;
@@ -318,7 +426,7 @@ export default function CRM() {
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button onClick={() => setAbaAtiva("dashboard")} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${abaAtiva === "dashboard" ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
             <span>📊</span> Dashboard
           </button>
@@ -444,7 +552,7 @@ export default function CRM() {
                               <p className="text-[10px] text-emerald-600 font-medium">🎂 Aniversariante de Hoje!</p>
                             </div>
                           </div>
-                          <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome))} className="hover:scale-110 transition-transform p-1">
+                          <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform p-1">
                             <WhatsAppIcon />
                           </button>
                         </div>
@@ -461,8 +569,8 @@ export default function CRM() {
                               <p className="text-[10px] text-red-600 font-medium">🚨 Receita Vence Hoje!</p>
                             </div>
                           </div>
-                          <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome))} className="hover:scale-110 transition-transform p-1">
-                            <WhatsAppIcon />
+                          <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform p-1">
+                            <WhatsAppIconRed />
                           </button>
                         </div>
                       );
@@ -502,7 +610,7 @@ export default function CRM() {
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cliente</th>
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contato</th>
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Datas</th>
-                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>Status {sortOrder === 'asc' ? '▲' : '▼'}</th>
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Ações</th>
                     </tr>
                   </thead>
@@ -535,26 +643,34 @@ export default function CRM() {
                             <p className="text-[10px] text-slate-400 font-medium">ID: #{c.id}</p>
                           </td>
                           <td className="px-6 py-4">
-                            <p className="text-sm text-slate-600 font-medium">{c.telefone}</p>
-                            <button onClick={() => whatsapp(c.telefone)} className="text-[10px] font-bold text-indigo-600 hover:underline">WhatsApp</button>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm text-slate-600 font-medium whitespace-nowrap">{c.telefone}</p>
+                              <button onClick={() => whatsapp(c.telefone)} className="text-[10px] font-bold text-indigo-600 hover:underline">WhatsApp</button>
+                            </div>
                           </td>
                           <td className="px-6 py-4">
-                            <p className="text-[11px] text-slate-600 font-medium">🎂 {c.nascimento}</p>
-                            <p className="text-[11px] text-slate-600 font-medium mt-0.5">📄 {c.receita}</p>
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[11px] text-slate-600 font-medium">🎂 {c.nascimento}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[11px] text-slate-600 font-medium">📄 {c.receita}</span>
+                              </div>
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-wrap gap-1.5">
-                              {anivHoje && <span className="px-2 py-0.5 bg-emerald-500 text-white text-[9px] font-bold rounded-full uppercase">Aniv. HOJE!</span>}
-                              {statusRecText && <span className={`px-2 py-0.5 text-white text-[9px] font-bold rounded-full uppercase ${statusRecText === "VENCE HOJE!" ? "bg-red-500" : statusRecText.includes("Venceu") ? "bg-red-800" : "bg-red-400"}`}>{statusRecText}</span>}
-                              {anivMes && !anivHoje && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded-full uppercase">Aniv. do Mês</span>}
+                              {anivHoje && <span className={`px-2 py-0.5 bg-emerald-500 text-white text-[9px] font-bold rounded-full uppercase ${(status.aniversarioNoDia || statusInd.aniversarioMes) ? "line-through opacity-50" : ""}`}>Aniv. HOJE!</span>}
+                              {statusRecText && <span className={`px-2 py-0.5 text-white text-[9px] font-bold rounded-full uppercase ${statusRecText === "VENCE HOJE!" ? "bg-red-500" : statusRecText.includes("Venceu") ? "bg-red-800" : "bg-red-400"} ${(status.receitaNoDia || statusInd.receitaAntecipada) ? "line-through opacity-50" : ""}`}>{statusRecText}</span>}
+                              {anivMes && !anivHoje && <span className={`px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded-full uppercase ${statusInd.aniversarioMes ? "line-through opacity-50" : ""}`}>Aniv. do Mês</span>}
                             </div>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Aniversário">
+                              {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Aniversário">
                                 <WhatsAppIcon />
                               </button>}
-                              {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Receita">
+                              {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Receita">
                                 <WhatsAppIconRed />
                               </button>}
                               <button onClick={() => { editar(c); setAbaAtiva("dashboard"); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">✏️</button>
@@ -613,7 +729,7 @@ export default function CRM() {
                               {diaSelecionado === diaHoje && <input type="checkbox" checked={status.aniversarioNoDia} onChange={() => marcarEnviado(c.id, "aniversarioNoDia")} className="rounded text-emerald-600 w-3 h-3 cursor-pointer" />}
                               <span className={`text-xs font-bold text-slate-700 ${diaSelecionado === diaHoje && status.aniversarioNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</span>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome))} className="hover:scale-110 transition-transform">
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform">
                               <WhatsAppIcon />
                             </button>
                           </div>
@@ -630,8 +746,8 @@ export default function CRM() {
                               {diaSelecionado === diaHoje && <input type="checkbox" checked={status.receitaNoDia} onChange={() => marcarEnviado(c.id, "receitaNoDia")} className="rounded text-red-600 w-3 h-3 cursor-pointer" />}
                               <span className={`text-xs font-bold text-slate-700 ${diaSelecionado === diaHoje && status.receitaNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</span>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome))} className="hover:scale-110 transition-transform">
-                              <WhatsAppIcon />
+                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform">
+                              <WhatsAppIconRed />
                             </button>
                           </div>
                         );
