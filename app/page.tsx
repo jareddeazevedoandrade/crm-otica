@@ -251,7 +251,7 @@ export default function CRM() {
 
   const getMsgReceitaHoje = (nomeCompleto: string) => {
     const primeiroNome = nomeCompleto.split(" ")[0];
-    return `🚨 ${primeiroNome}, SUA RECEITA VENCEU HOJE! 👀\n\nPassando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nE aproveitando: a Ótica Líder está com uma Mega Promoção 🔥\n\nGostaria que eu marcasse uma data para seu exame? 😄`;
+    return `🚨 ${primeiroNome}, SUA RECEITA VENCEU HOJE! 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`;
   };
 
   const getMsgReceitaVencida = (nomeCompleto: string, diasVencidos: number) => {
@@ -260,7 +260,7 @@ export default function CRM() {
     
     // Se faz mais de 3 anos (3 * 365 = 1095 dias)
     if (diasVencidos > 1095) {
-      return `🌟 *${primeiroNome}, sentimos sua falta por aqui!* 😊\n\nFaz um tempinho que você não aparece na Ótica Líder e queríamos te dar um motivo especial pra voltar! 🎁\n\nPreparamos uma *condição exclusiva* pra você, só por ser nosso cliente!\n\nPosso te contar os detalhes? 😄`;
+      return `🌟 *${primeiroNome}, sentimos sua falta por aqui!*\n\nFaz um tempinho que você não aparece na Ótica Líder e queríamos te dar um motivo especial pra voltar! 🎁\n\nPreparamos uma *CONDIÇÃO EXCLUSIVA* pra você, só por ser nosso cliente!\n\nPosso te contar os detalhes? 😄`;
     }
     
     // Se faz menos de 3 anos
@@ -269,7 +269,7 @@ export default function CRM() {
 
   const getMsgReceitaProximaVencer = (nomeCompleto: string, diasFaltando: number) => {
     const primeiroNome = nomeCompleto.split(" ")[0];
-    return `🚨 ${primeiroNome}, SUA RECEITA VENCE EM ${diasFaltando} DIAS! 👀\n\nPassando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nE aproveitando: a Ótica Líder está com uma Mega Promoção 🔥\n\nGostaria que eu marcasse uma data para seu exame? 😄`;
+    return `🚨 *${primeiroNome.toUpperCase()}, SUA RECEITA VENCE EM ${diasFaltando} DIAS!* 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`;
   };
 
   // FUNÇÃO PARA OBTER A MENSAGEM CORRETA BASEADA NO STATUS
@@ -305,6 +305,26 @@ export default function CRM() {
       return getMsgAniversarioHoje(nomeCompleto);
     }
     return getMsgAniversarioMes(nomeCompleto);
+  };
+
+  // MENSAGEM COMBINADA: ANIVERSÁRIO + RECEITA (VENCIDA OU A VENCER)
+  const getMsgAniversarioComReceita = (nomeCompleto: string, dataReceita: string, dataNascimento: string) => {
+    const primeiroNome = nomeCompleto.split(" ")[0].toUpperCase();
+    const dias = diasPassadosReceita(dataReceita);
+    const anivHoje = isAniversarioHoje(dataNascimento);
+    
+    let titulo = "";
+    if (dias !== null && dias >= 365) {
+      // Receita Vencida
+      const tipoAniv = anivHoje ? "ANIVERSÁRIO" : "ANIVERSÁRIANTE DO MÊS";
+      titulo = `SUA *RECEITA VENCEU* E VOCÊ GANHOU UM *PRESENTE DE ${tipoAniv}*`;
+    } else if (dias !== null) {
+      // Receita a Vencer
+      const diasFaltando = 365 - dias;
+      titulo = `SUA *RECEITA VENCE EM ${diasFaltando} DIAS* E VOCÊ GANHOU UM *PRESENTE DE ANIVERSÁRIO*`;
+    }
+
+    return `🎉 ${primeiroNome}, ${titulo}! 😍\n\nComo a receita de óculos vence em 1 ano, já está na hora de atualizar seu exame de vista 😊\n\n🎁 *Consulta GRATUITA ➕ 20% OFF* em qualquer produto da loja!\n\nSeu cupom: ANIVERSARIO20 ✨\n\nO desconto também vale para toda sua família 😊\n\nJá posso marcar sua consulta? 😄`;
   };
 
   const whatsapp = (numero: string, msg = "") => {
@@ -423,6 +443,12 @@ export default function CRM() {
   const WhatsAppIconRed = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.445 0 .081 5.363.079 11.969c0 2.112.551 4.171 1.597 6.013L0 24l6.135-1.61a11.793 11.793 0 005.915 1.594h.005c6.604 0 11.967-5.363 11.97-11.97a11.815 11.815 0 00-3.502-8.473" fill="#EF4444"/>
+    </svg>
+  );
+
+  const WhatsAppIconBlue = () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.445 0 .081 5.363.079 11.969c0 2.112.551 4.171 1.597 6.013L0 24l6.135-1.61a11.793 11.793 0 005.915 1.594h.005c6.604 0 11.967-5.363 11.97-11.97a11.815 11.815 0 00-3.502-8.473" fill="#3B82F6"/>
     </svg>
   );
 
@@ -560,39 +586,62 @@ export default function CRM() {
                     Alertas de Hoje ({diaHoje}/{mesHoje})
                   </h3>
                   <div className="space-y-3">
-                    {clientes.filter(c => isAniversarioHoje(c.nascimento)).map(c => {
+                    {clientes.filter(c => isAniversarioHoje(c.nascimento) || isReceitaHoje(c.receita)).map(c => {
                       const status = getStatus(c.id);
-                      return (
-                        <div key={c.id} className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                          <div className="flex items-center gap-3">
-                            <input type="checkbox" checked={status.aniversarioNoDia} onChange={() => marcarEnviado(c.id, "aniversarioNoDia")} className="rounded text-emerald-600 w-4 h-4 cursor-pointer" />
-                            <div>
-                              <p className={`text-sm font-bold text-emerald-900 ${status.aniversarioNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</p>
-                              <p className="text-[10px] text-emerald-600 font-medium">🎂 Aniversariante de Hoje!</p>
+                      const anivHoje = isAniversarioHoje(c.nascimento);
+                      const recHoje = isReceitaHoje(c.receita);
+                      
+                      if (anivHoje && recHoje) {
+                        return (
+                          <div key={c.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
+                            <div className="flex items-center gap-3">
+                              <input type="checkbox" checked={status.aniversarioNoDia && status.receitaNoDia} onChange={() => { marcarEnviado(c.id, "aniversarioNoDia"); marcarEnviado(c.id, "receitaNoDia"); }} className="rounded text-blue-600 w-4 h-4 cursor-pointer" />
+                              <div>
+                                <p className={`text-sm font-bold text-blue-900 ${status.aniversarioNoDia && status.receitaNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</p>
+                                <p className="text-[10px] text-blue-600 font-medium">🎉 Aniversário + Receita Vencida!</p>
+                              </div>
                             </div>
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento))} className="hover:scale-110 transition-transform p-1">
+                              <WhatsAppIconBlue />
+                            </button>
                           </div>
-                          <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform p-1">
-                            <WhatsAppIcon />
-                          </button>
-                        </div>
-                      );
-                    })}
-                    {clientes.filter(c => isReceitaHoje(c.receita)).map(c => {
-                      const status = getStatus(c.id);
-                      return (
-                        <div key={c.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100">
-                          <div className="flex items-center gap-3">
-                            <input type="checkbox" checked={status.receitaNoDia} onChange={() => marcarEnviado(c.id, "receitaNoDia")} className="rounded text-red-600 w-4 h-4 cursor-pointer" />
-                            <div>
-                              <p className={`text-sm font-bold text-red-900 ${status.receitaNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</p>
-                              <p className="text-[10px] text-red-600 font-medium">🚨 Receita Vence Hoje!</p>
+                        );
+                      }
+                      
+                      if (anivHoje) {
+                        return (
+                          <div key={c.id} className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                            <div className="flex items-center gap-3">
+                              <input type="checkbox" checked={status.aniversarioNoDia} onChange={() => marcarEnviado(c.id, "aniversarioNoDia")} className="rounded text-emerald-600 w-4 h-4 cursor-pointer" />
+                              <div>
+                                <p className={`text-sm font-bold text-emerald-900 ${status.aniversarioNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</p>
+                                <p className="text-[10px] text-emerald-600 font-medium">🎂 Aniversariante de Hoje!</p>
+                              </div>
                             </div>
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform p-1">
+                              <WhatsAppIcon />
+                            </button>
                           </div>
-                          <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform p-1">
-                            <WhatsAppIconRed />
-                          </button>
-                        </div>
-                      );
+                        );
+                      }
+                      
+                      if (recHoje) {
+                        return (
+                          <div key={c.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100">
+                            <div className="flex items-center gap-3">
+                              <input type="checkbox" checked={status.receitaNoDia} onChange={() => marcarEnviado(c.id, "receitaNoDia")} className="rounded text-red-600 w-4 h-4 cursor-pointer" />
+                              <div>
+                                <p className={`text-sm font-bold text-red-900 ${status.receitaNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</p>
+                                <p className="text-[10px] text-red-600 font-medium">🚨 Receita Vence Hoje!</p>
+                              </div>
+                            </div>
+                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform p-1">
+                              <WhatsAppIconRed />
+                            </button>
+                          </div>
+                        );
+                      }
+                      return null;
                     })}
                     {clientes.filter(c => isAniversarioHoje(c.nascimento) || isReceitaHoje(c.receita)).length === 0 && (
                       <div className="py-10 text-center"><p className="text-slate-400 text-sm">Nenhum alerta crítico para hoje.</p></div>
@@ -697,12 +746,20 @@ export default function CRM() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Aniversário">
-                                <WhatsAppIcon />
-                              </button>}
-                              {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Receita">
-                                <WhatsAppIconRed />
-                              </button>}
+                              {(anivMes && statusRecText) ? (
+                                <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem Combinada">
+                                  <WhatsAppIconBlue />
+                                </button>
+                              ) : (
+                                <>
+                                  {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Aniversário">
+                                    <WhatsAppIcon />
+                                  </button>}
+                                  {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Receita">
+                                    <WhatsAppIconRed />
+                                  </button>}
+                                </>
+                              )}
                               <button onClick={() => { editar(c); setAbaAtiva("dashboard"); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">✏️</button>
                               <button onClick={() => excluir(c.id)} className="p-2 text-red-400 hover:text-red-600 transition-colors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 7H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 7H12H18V18C18 19.6569 16.6569 21 15 21H9C7.34315 21 6 19.6569 6 18V7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 5C9 4.44772 9.44772 4 10 4H14C14.5523 4 15 4.44772 15 5V7H9V5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                             </div>
