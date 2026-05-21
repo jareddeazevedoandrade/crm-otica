@@ -240,13 +240,13 @@ export default function CRM() {
 
   // MENSAGENS WHATSAPP ATUALIZADAS
   const getMsgAniversarioHoje = (nomeCompleto: string) => {
-    const primeiroNome = nomeCompleto.split(" ")[0];
-    return `🎉 ${primeiroNome}, ANIVERSARIANTE DO DIA TEM PRESENTE! 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 25% OFF em qualquer produto da loja!\n\nSeu cupom: ANIVERSARIO25\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`;
+    const primeiroNome = nomeCompleto.split(" ")[0].toUpperCase();
+    return `🎉 *${primeiroNome}, ANIVERSARIANTE DO DIA TEM PRESENTE!* 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 *25% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO25\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`;
   };
 
   const getMsgAniversarioMes = (nomeCompleto: string) => {
-    const primeiroNome = nomeCompleto.split(" ")[0];
-    return `🎉 ${primeiroNome}, ANIVERSARIANTE DO MÊS TEM PRESENTE! 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 20% OFF em qualquer produto da loja!\n\nSeu cupom: ANIVERSARIO20\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`;
+    const primeiroNome = nomeCompleto.split(" ")[0].toUpperCase();
+    return `🎉 *${primeiroNome}, ANIVERSARIANTE DO MÊS TEM PRESENTE!* 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 *20% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO20\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`;
   };
 
   const getMsgReceitaHoje = (nomeCompleto: string) => {
@@ -257,7 +257,14 @@ export default function CRM() {
   const getMsgReceitaVencida = (nomeCompleto: string, diasVencidos: number) => {
     const primeiroNome = nomeCompleto.split(" ")[0];
     const tempoFormatado = formatarTempoDecorrido(diasVencidos);
-    return `🚨 ${primeiroNome}, SUA RECEITA VENCEU HÁ ${tempoFormatado.toUpperCase()}! 👀\n\nPassando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nE aproveitando: a Ótica Líder está com uma Mega Promoção 🔥\n\nGostaria que eu marcasse uma data para seu exame? 😄`;
+    
+    // Se faz mais de 3 anos (3 * 365 = 1095 dias)
+    if (diasVencidos > 1095) {
+      return `🌟 *${primeiroNome}, sentimos sua falta por aqui!* 😊\n\nFaz um tempinho que você não aparece na Ótica Líder e queríamos te dar um motivo especial pra voltar! 🎁\n\nPreparamos uma *condição exclusiva* pra você, só por ser nosso cliente!\n\nPosso te contar os detalhes? 😄`;
+    }
+    
+    // Se faz menos de 3 anos
+    return `🚨 *${primeiroNome.toUpperCase()}, SUA RECEITA VENCEU HÁ ${tempoFormatado.toUpperCase()}!* 👀\n\nComo *receitas de óculos vencem em 1 ano*, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`;
   };
 
   const getMsgReceitaProximaVencer = (nomeCompleto: string, diasFaltando: number) => {
