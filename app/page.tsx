@@ -80,13 +80,37 @@ export default function CRM() {
     async function carregarDados() {
       if (!session) return;
       
-      // 1. Carregar Clientes
-      const { data: clientesData, error: clientesError } = await supabase.from("clientes").select("*");
-      if (clientesError) {
-        alert("Erro ao buscar clientes: " + clientesError.message);
-        return;
+      // 1. Carregar TODOS os Clientes (Busca Recursiva para superar o limite de 1000)
+      let todosClientes: Cliente[] = [];
+      let de = 0;
+      let ate = 999;
+      let continuaBusca = true;
+
+      while (continuaBusca) {
+        const { data, error } = await supabase
+          .from("clientes")
+          .select("*")
+          .range(de, ate);
+
+        if (error) {
+          alert("Erro ao buscar clientes: " + error.message);
+          continuaBusca = false;
+          return;
+        }
+
+        if (data && data.length > 0) {
+          todosClientes = [...todosClientes, ...data];
+          if (data.length < 1000) {
+            continuaBusca = false;
+          } else {
+            de += 1000;
+            ate += 1000;
+          }
+        } else {
+          continuaBusca = false;
+        }
       }
-      setClientes(Array.isArray(clientesData) ? clientesData : []);
+      setClientes(todosClientes);
 
       // 2. Carregar Status das Checkboxes (Persistência)
       const { data: statusData, error: statusError } = await supabase.from("cliente_status_envio").select("*");
