@@ -44,7 +44,25 @@ export default function CRM() {
 
   const [diaSelecionado, setDiaSelecionado] = useState<number | null>(null);
   const [abaAtiva, setAbaAtiva] = useState<"dashboard" | "clientes" | "calendario">("dashboard");
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc'); // 'asc' para crescente, 'desc' para decrescente
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Paginação
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const ITENS_POR_PAGINA = 50;
+
+  // Respostas dos clientes (cliente_contatos_historico)
+  const [respostas, setRespostas] = useState<Record<number, "pendente" | "interessado" | "recusou">>({});
+
+  // Modal histórico diário de "Contatados Hoje"
+  const [modalHistoricoHoje, setModalHistoricoHoje] = useState(false);
+  const [historicoHojeData, setHistoricoHojeData] = useState<{ data_marcacao: string; total: number }[]>([]);
+
+  // Toast de confirmação WhatsApp
+  const [toast, setToast] = useState<{ nome: string; tipo: string } | null>(null);
+
+  // Modal de histórico de contatos
+  const [historicoClienteId, setHistoricoClienteId] = useState<number | null>(null);
+  const [historicoData, setHistoricoData] = useState<{ tipo_envio: string; data_marcacao: string }[]>([]);
 
   useEffect(() => {
     const emailsPermitidos = [
@@ -141,6 +159,25 @@ export default function CRM() {
         setStatusEnvio(novoStatusEnvio);
         setStatusEnvioIndependente(novoStatusIndependente);
       }
+
+      // 3. Carregar respostas do histórico (última por cliente, ordenada por data)
+      const { data: respostasData, error: respostasError } = await supabase
+        .from("cliente_contatos_historico")
+        .select("cliente_id, resposta, data_marcacao")
+        .eq("tipo_envio", "resposta")
+        .order("data_marcacao", { ascending: false });
+      if (respostasError) {
+        console.error("Erro ao carregar respostas:", respostasError.message);
+      }
+      if (respostasData && respostasData.length > 0) {
+        const novasRespostas: Record<number, "pendente" | "interessado" | "recusou"> = {};
+        respostasData.forEach((r: any) => {
+          if (novasRespostas[r.cliente_id] === undefined) {
+            novasRespostas[r.cliente_id] = r.resposta;
+          }
+        });
+        setRespostas(novasRespostas);
+      }
     }
     carregarDados();
   }, [session]);
@@ -223,11 +260,8 @@ export default function CRM() {
   const getStatusReceita = (data: string) => {
     const dias = diasPassadosReceita(data);
     if (dias === null) return null;
-    
-    const d = parseData(data);
-    const isMesmoDiaEMes = d && d.dia === diaHoje && d.mes === mesHoje;
-    
-    if (isMesmoDiaEMes && dias >= 365) return "VENCE HOJE!";
+
+    if (dias >= 365 && dias < 366) return "VENCE HOJE!";
     if (dias > 350 && dias < 365) return `Vence em ${365 - dias} dias`;
     if (dias > 365) return `Venceu - ${dias - 365} dias`;
     return null;
@@ -305,11 +339,8 @@ export default function CRM() {
     const dias = diasPassadosReceita(dataReceita);
     if (dias === null) return "";
 
-    const d = parseData(dataReceita);
-    const isMesmoDiaEMes = d && d.dia === diaHoje && d.mes === mesHoje;
-
     // Receita vence hoje
-    if (isMesmoDiaEMes && dias >= 365) {
+    if (dias >= 365 && dias < 366) {
       return getMsgReceitaHoje(nomeCompleto);
     }
 
@@ -355,9 +386,83 @@ export default function CRM() {
     return `🎉 ${primeiroNome}, ${titulo}! 😍\n\nComo a receita de óculos vence em 1 ano, já está na hora de atualizar seu exame de vista 😊\n\n🎁 *Consulta GRATUITA ➕ 20% OFF* em qualquer produto da loja!\n\nSeu cupom: ANIVERSARIO20 ✨\n\nO desconto também vale para toda sua família 😊\n\nJá posso marcar sua consulta? 😄`;
   };
 
-  const whatsapp = (numero: string, msg = "") => {
+  const whatsapp = (numero: string, msg = "", nomeCliente = "", tipoMsg = "") => {
     const n = numero.replace(/\D/g, "");
     window.open(`https://api.whatsapp.com/send?phone=55${n}&text=${encodeURIComponent(msg)}`, "_blank");
+    if (nomeCliente) {
+      setToast({ nome: nomeCliente.split(" ")[0], tipo: tipoMsg });
+      setTimeout(() => setToast(null), 3500);
+    }
+  };
+
+  // ABRIR HISTÓRICO DE CONTATOS DO CLIENTE
+  const abrirHistorico = async (clienteId: number) => {
+    setHistoricoClienteId(clienteId);
+    const { data, error } = await supabase
+      .from("cliente_status_envio")
+      .select("tipo_envio, data_marcacao")
+      .eq("cliente_id", clienteId)
+      .eq("status", true)
+      .not("data_marcacao", "is", null)
+      .order("data_marcacao", { ascending: false });
+    if (!error && data) setHistoricoData(data);
+    else setHistoricoData([]);
+  };
+
+  // SALVAR RESPOSTA DO CLIENTE (uma linha por cliente, sobrescreve)
+  const salvarResposta = async (clienteId: number, resposta: "pendente" | "interessado" | "recusou") => {
+    const hojeFormatado = new Date().toISOString().slice(0, 10);
+    await supabase.from("cliente_contatos_historico").upsert(
+      { cliente_id: clienteId, tipo_envio: "resposta", data_marcacao: hojeFormatado, resposta },
+      { onConflict: "cliente_id, tipo_envio" }
+    );
+    setRespostas(prev => ({ ...prev, [clienteId]: resposta }));
+  };
+
+  // ABRIR HISTÓRICO DIÁRIO DE CONTATADOS HOJE
+  const abrirHistoricoHoje = async () => {
+    setModalHistoricoHoje(true);
+    // Conta contatos por dia nos dois status tables
+    const { data: envioData } = await supabase
+      .from("cliente_status_envio")
+      .select("data_marcacao")
+      .eq("status", true)
+      .not("data_marcacao", "is", null);
+    if (envioData) {
+      const contagem: Record<string, Set<string>> = {};
+      envioData.forEach((r: any) => {
+        if (!contagem[r.data_marcacao]) contagem[r.data_marcacao] = new Set();
+        // We count per date (unique entries approximate unique clients)
+        contagem[r.data_marcacao].add(r.data_marcacao + Math.random());
+      });
+      // Better: group by date and count distinct cliente_id
+    }
+    // Proper query: get distinct cliente_id counts per day
+    const { data: rawData } = await supabase
+      .from("cliente_status_envio")
+      .select("cliente_id, data_marcacao")
+      .eq("status", true)
+      .not("data_marcacao", "is", null)
+      .order("data_marcacao", { ascending: false });
+    if (rawData) {
+      const porDia: Record<string, Set<number>> = {};
+      rawData.forEach((r: any) => {
+        if (!porDia[r.data_marcacao]) porDia[r.data_marcacao] = new Set();
+        porDia[r.data_marcacao].add(r.cliente_id);
+      });
+      const resultado = Object.entries(porDia)
+        .map(([data, ids]) => ({ data_marcacao: data, total: ids.size }))
+        .sort((a, b) => b.data_marcacao.localeCompare(a.data_marcacao))
+        .slice(0, 30);
+      setHistoricoHojeData(resultado);
+    }
+  };
+
+  const TIPO_LABEL: Record<string, { label: string; color: string }> = {
+    aniversarioNoDia: { label: "🎂 Aniversário (Hoje)", color: "bg-emerald-100 text-emerald-700" },
+    receitaNoDia:     { label: "🚨 Receita (Hoje)",    color: "bg-red-100 text-red-700" },
+    aniversarioMes:   { label: "🎉 Aniversário (Mês)", color: "bg-indigo-100 text-indigo-700" },
+    receitaAntecipada:{ label: "📄 Receita (Antecip.)", color: "bg-orange-100 text-orange-700" },
   };
 
   // FUNÇÃO PARA PERSISTIR NO SUPABASE
@@ -418,10 +523,23 @@ export default function CRM() {
     if (filtro === "receitas_vencer") f = f.filter((c) => isReceitaParaVencer(c.receita));
     if (filtro === "receita_hoje") f = f.filter((c) => isReceitaHoje(c.receita));
     if (filtro === "receitas_vencidas") f = f.filter((c) => isReceitaVencidaTotal(c.receita));
-    
+    if (filtro === "contatados") f = f.filter((c) => {
+      const env = statusEnvio[c.id];
+      const ind = statusEnvioIndependente[c.id];
+      const temHoje = env && (env.aniversarioNoDia || env.receitaNoDia);
+      const temMensal = ind && (ind.aniversarioMes || ind.receitaAntecipada);
+      return !!(temHoje || temMensal);
+    });
+    if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interessado");
+
     if (pesquisa) {
       const p = pesquisa.toLowerCase();
-      f = f.filter((c) => c.nome.toLowerCase().includes(p) || c.telefone.includes(p));
+      const pDigits = pesquisa.replace(/\D/g, "");
+      f = f.filter((c) =>
+        c.nome.toLowerCase().includes(p) ||
+        c.telefone.includes(p) ||
+        (pDigits.length >= 4 && c.telefone.replace(/\D/g, "").includes(pDigits))
+      );
     }
 
     return [...f].sort((a, b) => {
@@ -463,6 +581,13 @@ export default function CRM() {
     });
   }, [clientes, filtro, pesquisa, sortOrder, statusEnvio]);
 
+  // Reset para página 1 quando filtro/pesquisa/ordem mudam
+  useEffect(() => { setPaginaAtual(1); }, [filtro, pesquisa, sortOrder]);
+
+  // PAGINAÇÃO
+  const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAGINA);
+  const paginado = filtrados.slice((paginaAtual - 1) * ITENS_POR_PAGINA, paginaAtual * ITENS_POR_PAGINA);
+
   const totalClientes = clientes.length;
   const aniversariantesMesCount = clientes.filter((c) => isAniversarioMes(c.nascimento)).length;
   const receitasVencidasCount = clientes.filter((c) => isReceitaVencidaTotal(c.receita)).length;
@@ -497,6 +622,32 @@ export default function CRM() {
 
     return idsContatados.size;
   }, [statusEnvio, statusEnvioIndependente]);
+
+  // INTERESSADOS HOJE
+  const interessadosHojeCount = useMemo(() => {
+    return Object.values(respostas).filter(r => r === "interessado").length;
+  }, [respostas]);
+
+  // CONTADORES POR FILTRO
+  const filtroContagens = useMemo(() => {
+    const contatadosIds = new Set<number>();
+    Object.entries(statusEnvio).forEach(([id, s]) => {
+      if (s.aniversarioNoDia || s.receitaNoDia) contatadosIds.add(Number(id));
+    });
+    Object.entries(statusEnvioIndependente).forEach(([id, s]) => {
+      if (s.aniversarioMes || s.receitaAntecipada) contatadosIds.add(Number(id));
+    });
+    return {
+      todos:             clientes.length,
+      aniv_mes:          clientes.filter(c => isAniversarioMes(c.nascimento)).length,
+      aniv_hoje:         clientes.filter(c => isAniversarioHoje(c.nascimento)).length,
+      receitas_vencer:   clientes.filter(c => isReceitaParaVencer(c.receita)).length,
+      receita_hoje:      clientes.filter(c => isReceitaHoje(c.receita)).length,
+      receitas_vencidas: clientes.filter(c => isReceitaVencidaTotal(c.receita)).length,
+      contatados:        contatadosIds.size,
+      interessados:      Object.values(respostas).filter(r => r === "interessado").length,
+    };
+  }, [clientes, statusEnvio, statusEnvioIndependente, respostas]);
 
   // ICONE WHATSAPP VERDE
   const WhatsAppIcon = () => (
@@ -585,42 +736,48 @@ export default function CRM() {
           {abaAtiva === "dashboard" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* CARDS DE RESUMO */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-xl">👥</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="w-11 h-11 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-lg shrink-0">👥</div>
                   <div>
-                    <p className="text-sm font-bold text-slate-400 uppercase">Total de Clientes</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Total de Clientes</p>
                     <p className="text-2xl font-black text-slate-900">{totalClientes}</p>
                   </div>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 text-xl">🎂</div>
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="w-11 h-11 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 text-lg shrink-0">🎂</div>
                   <div>
-                    <p className="text-sm font-bold text-slate-400 uppercase">Aniversários (Mês)</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Aniversários do Mês</p>
                     <p className="text-2xl font-black text-slate-900">{aniversariantesMesCount}</p>
                   </div>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center text-red-600 text-xl">🚨</div>
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="w-11 h-11 bg-red-50 rounded-full flex items-center justify-center text-red-500 text-lg shrink-0">🚨</div>
                   <div>
-                    <p className="text-sm font-bold text-slate-400 uppercase">Receitas Vencidas</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Receitas Vencidas</p>
                     <p className="text-2xl font-black text-slate-900">{receitasVencidasCount}</p>
                   </div>
                 </div>
-
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-xl">💬</div>
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="w-11 h-11 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-lg shrink-0">💬</div>
                   <div>
-                    <p className="text-sm font-bold text-slate-400 uppercase">Clientes Contatados</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Clientes Contatados</p>
                     <p className="text-2xl font-black text-slate-900">{clientesContatadosCount}</p>
                   </div>
                 </div>
-
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 text-xl">✅</div>
+                <button onClick={abrirHistoricoHoje} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 hover:border-emerald-300 hover:shadow-md transition-all text-left w-full">
+                  <div className="w-11 h-11 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 text-lg shrink-0">✅</div>
                   <div>
-                    <p className="text-sm font-bold text-slate-400 uppercase">Contatados Hoje</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Contatados Hoje</p>
                     <p className="text-2xl font-black text-slate-900">{contatadosHojeCount}</p>
+                    <p className="text-[10px] text-emerald-500 font-semibold mt-0.5">Ver histórico →</p>
+                  </div>
+                </button>
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-amber-100 flex items-center gap-4">
+                  <div className="w-11 h-11 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 text-lg shrink-0">👍</div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Interessados</p>
+                    <p className="text-2xl font-black text-slate-900">{interessadosHojeCount}</p>
                   </div>
                 </div>
               </div>
@@ -682,7 +839,7 @@ export default function CRM() {
                                 <p className="text-[10px] text-blue-600 font-medium">🎉 Aniversário + Receita Vencida!</p>
                               </div>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento))} className="hover:scale-110 transition-transform p-1">
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento), c.nome, "Aniversário + Receita")} className="hover:scale-110 transition-transform p-1">
                               <WhatsAppIconBlue />
                             </button>
                           </div>
@@ -699,7 +856,7 @@ export default function CRM() {
                                 <p className="text-[10px] text-emerald-600 font-medium">🎂 Aniversariante de Hoje!</p>
                               </div>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform p-1">
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento), c.nome, "Aniversário")} className="hover:scale-110 transition-transform p-1">
                               <WhatsAppIcon />
                             </button>
                           </div>
@@ -716,7 +873,7 @@ export default function CRM() {
                                 <p className="text-[10px] text-red-600 font-medium">🚨 Receita Vence Hoje!</p>
                               </div>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform p-1">
+                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita), c.nome, "Receita")} className="hover:scale-110 transition-transform p-1">
                               <WhatsAppIconRed />
                             </button>
                           </div>
@@ -736,18 +893,23 @@ export default function CRM() {
           {abaAtiva === "clientes" && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
-                <select 
-                  value={filtro} 
-                  onChange={(e) => setFiltro(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none min-w-[200px]"
-                >
-                  <option value="todos">Todos os Clientes</option>
-                  <option value="aniv_mes">Aniv. do Mês</option>
-                  <option value="aniv_hoje">Aniv. HOJE!</option>
-                  <option value="receitas_vencer">Receitas para vencer</option>
-                  <option value="receita_hoje">Receita hoje</option>
-                  <option value="receitas_vencidas">Receitas Vencidas</option>
-                </select>
+                <div className="relative min-w-[260px]">
+                  <select
+                    value={filtro}
+                    onChange={(e) => setFiltro(e.target.value)}
+                    className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg pl-4 pr-10 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    <option value="todos">Todos os Clientes ({filtroContagens.todos})</option>
+                    <option value="aniv_mes">Aniv. do Mês ({filtroContagens.aniv_mes})</option>
+                    <option value="aniv_hoje">Aniv. HOJE! ({filtroContagens.aniv_hoje})</option>
+                    <option value="receitas_vencer">Receitas para vencer ({filtroContagens.receitas_vencer})</option>
+                    <option value="receita_hoje">Receita hoje ({filtroContagens.receita_hoje})</option>
+                    <option value="receitas_vencidas">Receitas Vencidas ({filtroContagens.receitas_vencidas})</option>
+                    <option value="contatados">✅ Já Contatados ({filtroContagens.contatados})</option>
+                    <option value="interessados">👍 Interessados ({filtroContagens.interessados})</option>
+                  </select>
+                  <svg className="pointer-events-none absolute right-3 top-2.5 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
 
                 <div className="flex-1 min-w-[300px] relative">
                   <input 
@@ -775,7 +937,7 @@ export default function CRM() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {filtrados.map((c) => {
+                    {paginado.map((c) => {
                       const anivHoje = isAniversarioHoje(c.nascimento);
                       const recHoje = isReceitaHoje(c.receita);
                       const anivMes = isAniversarioMes(c.nascimento);
@@ -824,23 +986,46 @@ export default function CRM() {
                               {statusRecText && <span className={`px-2 py-0.5 text-white text-[9px] font-bold rounded-full uppercase ${statusRecText === "VENCE HOJE!" ? "bg-red-500" : statusRecText.includes("Venceu") ? "bg-red-800" : "bg-red-400"} ${(status.receitaNoDia || statusInd.receitaAntecipada) ? "line-through opacity-50" : ""}`}>{statusRecText}</span>}
                               {anivMes && !anivHoje && <span className={`px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded-full uppercase ${statusInd.aniversarioMes ? "line-through opacity-50" : ""}`}>Aniv. do Mês</span>}
                             </div>
+                            {/* BOTÕES DE RESPOSTA — aparecem quando qualquer checkbox estiver marcada */}
+                            {(status.aniversarioNoDia || status.receitaNoDia || statusInd.aniversarioMes || statusInd.receitaAntecipada) && (
+                              <div className="flex gap-1 mt-2">
+                                <button
+                                  onClick={() => salvarResposta(c.id, "pendente")}
+                                  title="Sem resposta"
+                                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold border transition-all ${respostas[c.id] === undefined || respostas[c.id] === "pendente" ? "bg-slate-100 border-slate-300 text-slate-500" : "border-transparent text-slate-300 hover:text-slate-500"}`}
+                                >💬 Pendente</button>
+                                <button
+                                  onClick={() => salvarResposta(c.id, "interessado")}
+                                  title="Cliente interessado"
+                                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold border transition-all ${respostas[c.id] === "interessado" ? "bg-amber-100 border-amber-300 text-amber-700" : "border-transparent text-slate-300 hover:text-amber-500"}`}
+                                >👍 Interessado</button>
+                                <button
+                                  onClick={() => salvarResposta(c.id, "recusou")}
+                                  title="Cliente não respondeu / recusou"
+                                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold border transition-all ${respostas[c.id] === "recusou" ? "bg-red-100 border-red-300 text-red-600" : "border-transparent text-slate-300 hover:text-red-400"}`}
+                                >❌ Recusou</button>
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
                               {(anivMes && statusRecText) ? (
-                                <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem Combinada">
+                                <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento), c.nome, "Aniversário + Receita")} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem Combinada">
                                   <WhatsAppIconBlue />
                                 </button>
                               ) : (
                                 <>
-                                  {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Aniversário">
+                                  {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento), c.nome, "Aniversário")} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Aniversário">
                                     <WhatsAppIcon />
                                   </button>}
-                                  {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Receita">
+                                  {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita), c.nome, "Receita")} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Receita">
                                     <WhatsAppIconRed />
                                   </button>}
                                 </>
                               )}
+                              <button onClick={() => abrirHistorico(c.id)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Ver histórico de contatos">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                              </button>
                               <button onClick={() => { editar(c); setAbaAtiva("dashboard"); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">✏️</button>
                               <button onClick={() => excluir(c.id)} className="p-2 text-red-400 hover:text-red-600 transition-colors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 7H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 7H12H18V18C18 19.6569 16.6569 21 15 21H9C7.34315 21 6 19.6569 6 18V7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 5C9 4.44772 9.44772 4 10 4H14C14.5523 4 15 4.44772 15 5V7H9V5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                             </div>
@@ -851,6 +1036,55 @@ export default function CRM() {
                   </tbody>
                 </table>
               </div>
+
+              {/* PAGINAÇÃO */}
+              {totalPaginas > 1 && (
+                <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-4 flex-wrap">
+                  <p className="text-xs text-slate-400 font-medium">
+                    Mostrando <span className="font-bold text-slate-600">{(paginaAtual - 1) * ITENS_POR_PAGINA + 1}–{Math.min(paginaAtual * ITENS_POR_PAGINA, filtrados.length)}</span> de <span className="font-bold text-slate-600">{filtrados.length}</span> clientes
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPaginaAtual(1)}
+                      disabled={paginaAtual === 1}
+                      className="px-2 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    >«</button>
+                    <button
+                      onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
+                      disabled={paginaAtual === 1}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    >‹ Anterior</button>
+                    {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+                      .filter(p => p === 1 || p === totalPaginas || Math.abs(p - paginaAtual) <= 2)
+                      .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                        if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push("...");
+                        acc.push(p);
+                        return acc;
+                      }, [])
+                      .map((p, i) =>
+                        p === "..." ? (
+                          <span key={`ellipsis-${i}`} className="px-2 text-slate-300 text-xs">…</span>
+                        ) : (
+                          <button
+                            key={p}
+                            onClick={() => setPaginaAtual(p as number)}
+                            className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${paginaAtual === p ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" : "text-slate-500 hover:bg-slate-100"}`}
+                          >{p}</button>
+                        )
+                      )}
+                    <button
+                      onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
+                      disabled={paginaAtual === totalPaginas}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    >Próxima ›</button>
+                    <button
+                      onClick={() => setPaginaAtual(totalPaginas)}
+                      disabled={paginaAtual === totalPaginas}
+                      className="px-2 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    >»</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -928,6 +1162,87 @@ export default function CRM() {
           )}
         </div>
       </main>
+      {/* MODAL HISTÓRICO DIÁRIO DE CONTATADOS */}
+      {modalHistoricoHoje && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setModalHistoricoHoje(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-emerald-500 rounded-full"></span>
+                Histórico de Contatos
+              </h3>
+              <button onClick={() => setModalHistoricoHoje(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+            {historicoHojeData.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="text-slate-400 text-sm">Nenhum contato registrado ainda.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {historicoHojeData.map((h, i) => {
+                  const dataFormatada = new Date(h.data_marcacao + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+                  const isHoje = h.data_marcacao === new Date().toISOString().slice(0, 10);
+                  return (
+                    <div key={i} className={`flex items-center justify-between px-4 py-3 rounded-lg border ${isHoje ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-100"}`}>
+                      <span className="text-xs text-slate-600 font-medium capitalize">{dataFormatada}</span>
+                      <span className={`text-sm font-black ${isHoje ? "text-emerald-600" : "text-slate-700"}`}>{h.total} <span className="text-[10px] font-medium text-slate-400">contatados</span></span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TOAST DE CONFIRMAÇÃO WHATSAPP */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+          <span className="text-lg">✅</span>
+          <div>
+            <p className="text-sm font-bold">WhatsApp aberto!</p>
+            <p className="text-xs text-slate-400">{toast.nome} · {toast.tipo}</p>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HISTÓRICO DE CONTATOS */}
+      {historicoClienteId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setHistoricoClienteId(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-indigo-600 rounded-full"></span>
+                Histórico de Contatos
+                <span className="text-xs font-medium text-slate-400 ml-1">
+                  · {clientes.find(c => c.id === historicoClienteId)?.nome.split(" ").slice(0,2).join(" ")}
+                </span>
+              </h3>
+              <button onClick={() => setHistoricoClienteId(null)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+            {historicoData.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="text-slate-400 text-sm">Nenhum contato registrado ainda.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {historicoData.map((h, i) => {
+                  const info = TIPO_LABEL[h.tipo_envio] ?? { label: h.tipo_envio, color: "bg-slate-100 text-slate-600" };
+                  const dataFormatada = h.data_marcacao
+                    ? new Date(h.data_marcacao + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })
+                    : "—";
+                  return (
+                    <div key={i} className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-lg border border-slate-100">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${info.color}`}>{info.label}</span>
+                      <span className="text-xs text-slate-500 font-medium">{dataFormatada}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
