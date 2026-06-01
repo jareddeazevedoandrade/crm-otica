@@ -32,12 +32,14 @@ export default function CRM() {
   const [statusEnvio, setStatusEnvio] = useState<Record<number, { 
     aniversarioNoDia: boolean; 
     receitaNoDia: boolean;
+    data_marcacao?: string;
   }>>({});
 
   // Checkboxes independentes (Mês / Antecipado)
   const [statusEnvioIndependente, setStatusEnvioIndependente] = useState<Record<number, { 
     aniversarioMes: boolean; 
     receitaAntecipada: boolean;
+    data_marcacao?: string;
   }>>({});
 
   const [diaSelecionado, setDiaSelecionado] = useState<number | null>(null);
@@ -113,24 +115,26 @@ export default function CRM() {
       setClientes(todosClientes);
 
       // 2. Carregar Status das Checkboxes (Persistência)
-      const { data: statusData, error: statusError } = await supabase.from("cliente_status_envio").select("*");
+      const { data: statusData, error: statusError } = await supabase.from("cliente_status_envio").select("*, data_marcacao");
       if (statusError) {
         console.error("Erro ao buscar status de envio:", statusError.message);
         return;
       }
 
       if (statusData) {
-        const novoStatusEnvio: Record<number, { aniversarioNoDia: boolean; receitaNoDia: boolean }> = {};
-        const novoStatusIndependente: Record<number, { aniversarioMes: boolean; receitaAntecipada: boolean }> = {};
+        const novoStatusEnvio: Record<number, { aniversarioNoDia: boolean; receitaNoDia: boolean; data_marcacao?: string }> = {};
+        const novoStatusIndependente: Record<number, { aniversarioMes: boolean; receitaAntecipada: boolean; data_marcacao?: string }> = {};
 
         statusData.forEach((item: any) => {
           const cid = item.cliente_id;
           if (item.tipo_envio === "aniversarioNoDia" || item.tipo_envio === "receitaNoDia") {
             if (!novoStatusEnvio[cid]) novoStatusEnvio[cid] = { aniversarioNoDia: false, receitaNoDia: false };
             novoStatusEnvio[cid][item.tipo_envio as "aniversarioNoDia" | "receitaNoDia"] = item.status;
+            if (item.data_marcacao) novoStatusEnvio[cid].data_marcacao = item.data_marcacao;
           } else if (item.tipo_envio === "aniversarioMes" || item.tipo_envio === "receitaAntecipada") {
             if (!novoStatusIndependente[cid]) novoStatusIndependente[cid] = { aniversarioMes: false, receitaAntecipada: false };
             novoStatusIndependente[cid][item.tipo_envio as "aniversarioMes" | "receitaAntecipada"] = item.status;
+            if (item.data_marcacao) novoStatusIndependente[cid].data_marcacao = item.data_marcacao;
           }
         });
 
@@ -361,7 +365,12 @@ export default function CRM() {
     await supabase
       .from('cliente_status_envio')
       .upsert(
-        { cliente_id: clienteId, tipo_envio: tipoEnvio, status: novoStatus },
+        { 
+          cliente_id: clienteId, 
+          tipo_envio: tipoEnvio, 
+          status: novoStatus, 
+          data_marcacao: novoStatus ? new Date().toISOString().slice(0, 10) : null 
+        },
         { onConflict: 'cliente_id, tipo_envio' }
       );
   };
@@ -371,7 +380,14 @@ export default function CRM() {
       const statusAtual = prev[id] || { aniversarioNoDia: false, receitaNoDia: false };
       const novoStatus = !statusAtual[tipo];
       atualizarStatusNoSupabase(id, tipo, novoStatus);
-      return { ...prev, [id]: { ...statusAtual, [tipo]: novoStatus } };
+      return { 
+        ...prev, 
+        [id]: { 
+          ...statusAtual, 
+          [tipo]: novoStatus,
+          data_marcacao: novoStatus ? new Date().toISOString().slice(0, 10) : statusAtual.data_marcacao 
+        } 
+      };
     });
   };
 
@@ -380,82 +396,107 @@ export default function CRM() {
       const statusAtual = prev[id] || { aniversarioMes: false, receitaAntecipada: false };
       const novoStatus = !statusAtual[tipo];
       atualizarStatusNoSupabase(id, tipo, novoStatus);
-      return { ...prev, [id]: { ...statusAtual, [tipo]: novoStatus } };
+      return {
+        ...prev,
+        [id]: {
+          ...statusAtual,
+          [tipo]: novoStatus,
+          data_marcacao: novoStatus ? new Date().toISOString().slice(0, 10) : statusAtual.data_marcacao,
+        },
+      };
     });
   };
 
   const getStatus = (id: number) => statusEnvio[id] || { aniversarioNoDia: false, receitaNoDia: false };
   const getStatusInd = (id: number) => statusEnvioIndependente[id] || { aniversarioMes: false, receitaAntecipada: false };
 
+  // CORREÇÃO 1: Ordenação por filtro ativo
   const filtrados = useMemo(() => {
-  let lista = [...clientes];
-
-  // FILTROS
-  if (filtro === "aniv_mes") {
-    lista = lista.filter((c) => isAniversarioMes(c.nascimento));
-  }
-
-  if (filtro === "aniv_hoje") {
-    lista = lista.filter((c) => isAniversarioHoje(c.nascimento));
-  }
-
-  if (filtro === "receitas_vencer") {
-    lista = lista.filter(
-      (c) => isReceitaParaVencer(c.receita) && !isReceitaVencidaTotal(c.receita)
-    );
-  }
-
-  if (filtro === "receita_hoje") {
-    lista = lista.filter((c) => isReceitaHoje(c.receita));
-  }
-
-  if (filtro === "receitas_vencidas") {
-    lista = lista.filter((c) => isReceitaVencidaTotal(c.receita));
-  }
-
-  if (pesquisa.trim()) {
-    lista = lista.filter((c) =>
-      c.nome.toLowerCase().includes(pesquisa.toLowerCase())
-    );
-  }
-
-  // 🔥 VALOR PADRÃO DE ORDENAÇÃO (IMPORTANTE)
-  const getSortValue = (c: Cliente) => {
-    if (filtro.includes("aniv")) {
-      const d = parseData(c.nascimento);
-      return d ? d.dia + d.mes * 100 : 0;
+    let f = clientes;
+    if (filtro === "aniv_mes") f = f.filter((c) => isAniversarioMes(c.nascimento));
+    if (filtro === "aniv_hoje") f = f.filter((c) => isAniversarioHoje(c.nascimento));
+    if (filtro === "receitas_vencer") f = f.filter((c) => isReceitaParaVencer(c.receita));
+    if (filtro === "receita_hoje") f = f.filter((c) => isReceitaHoje(c.receita));
+    if (filtro === "receitas_vencidas") f = f.filter((c) => isReceitaVencidaTotal(c.receita));
+    
+    if (pesquisa) {
+      const p = pesquisa.toLowerCase();
+      f = f.filter((c) => c.nome.toLowerCase().includes(p) || c.telefone.includes(p));
     }
 
-    if (filtro.includes("receita")) {
-      return diasPassadosReceita(c.receita) || 0;
-    }
+    return [...f].sort((a, b) => {
+      // Filtros de aniversário: ordenar por dia do mês
+      if (filtro === "aniv_mes" || filtro === "aniv_hoje") {
+        const dA = parseData(a.nascimento);
+        const dB = parseData(b.nascimento);
+        const diaA = dA ? dA.dia : 99;
+        const diaB = dB ? dB.dia : 99;
+        if (diaA !== diaB) return sortOrder === 'asc' ? diaA - diaB : diaB - diaA;
+        return sortOrder === 'asc' ? a.nome.localeCompare(b.nome) : b.nome.localeCompare(a.nome);
+      }
 
-    // padrão geral (nome)
-    return c.nome.toLowerCase();
-  };
+      // Filtros de receita: ordenar por prioridade de status
+      if (filtro === "receitas_vencer" || filtro === "receita_hoje" || filtro === "receitas_vencidas") {
+        const statusA = getStatusReceita(a.receita) || "";
+        const statusB = getStatusReceita(b.receita) || "";
+        const diasA = diasPassadosReceita(a.receita) ?? 0;
+        const diasB = diasPassadosReceita(b.receita) ?? 0;
 
-  // SORT GLOBAL (FUNCIONA SEMPRE)
-  lista.sort((a, b) => {
-    const valA = getSortValue(a);
-    const valB = getSortValue(b);
+        const priority = (s: string) => {
+          if (s === "VENCE HOJE!") return 1;
+          if (s.includes("Venceu")) return 2;
+          if (s.includes("Vence em")) return 3;
+          return 4;
+        };
 
-    if (typeof valA === "string" && typeof valB === "string") {
-      return sortOrder === "asc"
-        ? valA.localeCompare(valB)
-        : valB.localeCompare(valA);
-    }
+        const pA = priority(statusA);
+        const pB = priority(statusB);
 
-    return sortOrder === "asc"
-      ? Number(valA) - Number(valB)
-      : Number(valB) - Number(valA);
-  });
+        if (pA !== pB) return sortOrder === 'asc' ? pA - pB : pB - pA;
+        // Dentro da mesma prioridade, mais vencida primeiro no asc
+        if (diasA !== diasB) return sortOrder === 'asc' ? diasB - diasA : diasA - diasB;
+        return sortOrder === 'asc' ? a.nome.localeCompare(b.nome) : b.nome.localeCompare(a.nome);
+      }
 
-  return lista;
-}, [clientes, filtro, pesquisa, sortOrder]);
+      // Filtro "todos": ordenar por nome
+      return sortOrder === 'asc' ? a.nome.localeCompare(b.nome) : b.nome.localeCompare(a.nome);
+    });
+  }, [clientes, filtro, pesquisa, sortOrder, statusEnvio]);
 
   const totalClientes = clientes.length;
   const aniversariantesMesCount = clientes.filter((c) => isAniversarioMes(c.nascimento)).length;
   const receitasVencidasCount = clientes.filter((c) => isReceitaVencidaTotal(c.receita)).length;
+
+  const clientesContatadosCount = useMemo(() => {
+    const idsContatados = new Set();
+    Object.entries(statusEnvio).forEach(([id, status]) => {
+      if (status.aniversarioNoDia || status.receitaNoDia) idsContatados.add(id);
+    });
+    Object.entries(statusEnvioIndependente).forEach(([id, status]) => {
+      if (status.aniversarioMes || status.receitaAntecipada) idsContatados.add(id);
+    });
+    return idsContatados.size;
+  }, [statusEnvio, statusEnvioIndependente]);
+
+  // CORREÇÃO 2: Contatados hoje conta tanto "Hoje" quanto "Controle Mensal", sem duplicar por cliente
+  const contatadosHojeCount = useMemo(() => {
+    const hojeFormatado = new Date().toISOString().slice(0, 10);
+    const idsContatados = new Set<string>();
+
+    Object.entries(statusEnvio).forEach(([id, status]) => {
+      if ((status.aniversarioNoDia || status.receitaNoDia) && status.data_marcacao === hojeFormatado) {
+        idsContatados.add(id);
+      }
+    });
+
+    Object.entries(statusEnvioIndependente).forEach(([id, status]) => {
+      if ((status.aniversarioMes || status.receitaAntecipada) && status.data_marcacao === hojeFormatado) {
+        idsContatados.add(id);
+      }
+    });
+
+    return idsContatados.size;
+  }, [statusEnvio, statusEnvioIndependente]);
 
   // ICONE WHATSAPP VERDE
   const WhatsAppIcon = () => (
@@ -544,7 +585,7 @@ export default function CRM() {
           {abaAtiva === "dashboard" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* CARDS DE RESUMO */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
                   <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-xl">👥</div>
                   <div>
@@ -564,6 +605,22 @@ export default function CRM() {
                   <div>
                     <p className="text-sm font-bold text-slate-400 uppercase">Receitas Vencidas</p>
                     <p className="text-2xl font-black text-slate-900">{receitasVencidasCount}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-xl">💬</div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-400 uppercase">Clientes Contatados</p>
+                    <p className="text-2xl font-black text-slate-900">{clientesContatadosCount}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 text-xl">✅</div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-400 uppercase">Contatados Hoje</p>
+                    <p className="text-2xl font-black text-slate-900">{contatadosHojeCount}</p>
                   </div>
                 </div>
               </div>
