@@ -17,10 +17,10 @@ type Lembrete = {
 type Cliente = {
   id: number;
   nome: string;
-  nascimento: string | null;
-  receita: string | null;
+  nascimento: string;
+  receita: string;
   telefone: string;
-  observacoes: string | null;
+  observacoes: string;
 };
 
 export default function CRM() {
