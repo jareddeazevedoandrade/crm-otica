@@ -628,8 +628,8 @@ export default function CRM() {
     return [...f].sort((a, b) => {
       // Filtros de aniversário: ordenar por dia do mês
       if (filtro === "aniv_mes" || filtro === "aniv_hoje") {
-        const dA = parseData(a.nascimento);
-        const dB = parseData(b.nascimento);
+        const dA = parseData(a.nascimento || "");
+        const dB = parseData(b.nascimento || "");
         const diaA = dA ? dA.dia : 99;
         const diaB = dB ? dB.dia : 99;
         if (diaA !== diaB) return sortOrder === 'asc' ? diaA - diaB : diaB - diaA;
@@ -638,10 +638,10 @@ export default function CRM() {
 
       // Filtros de receita: ordenar por prioridade de status
       if (filtro === "receitas_vencer" || filtro === "receita_hoje" || filtro === "receitas_vencidas") {
-        const statusA = getStatusReceita(a.receita) || "";
-        const statusB = getStatusReceita(b.receita) || "";
-        const diasA = diasPassadosReceita(a.receita) ?? 0;
-        const diasB = diasPassadosReceita(b.receita) ?? 0;
+        const statusA = getStatusReceita(a.receita || "") || "";
+        const statusB = getStatusReceita(b.receita || "") || "";
+        const diasA = diasPassadosReceita(a.receita || "") ?? 0;
+        const diasB = diasPassadosReceita(b.receita || "") ?? 0;
 
         const priority = (s: string) => {
           if (s === "VENCE HOJE!") return 1;
