@@ -17,10 +17,10 @@ type Lembrete = {
 type Cliente = {
   id: number;
   nome: string;
-  nascimento: string;
-  receita: string;
+  nascimento: string | null;
+  receita: string | null;
   telefone: string;
-  observacoes: string;
+  observacoes: string | null;
 };
 
 export default function CRM() {
@@ -114,7 +114,7 @@ export default function CRM() {
     };
 
     init();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       setSession(session);
     });
     return () => subscription.unsubscribe();
@@ -1277,8 +1277,8 @@ export default function CRM() {
 
               <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-xl overflow-hidden shadow-inner">
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((dia) => {
-                  const anivs = clientes.filter(c => { const d = parseData(c.nascimento); return d ? d.dia === dia && d.mes === mesHoje : false; });
-                  const recs = clientes.filter(c => { const d = parseData(c.receita); return d ? d.dia === dia && d.mes === mesHoje : false; });
+                  const anivs = clientes.filter(c => { const d = c.nascimento ? parseData(c.nascimento) : null; return d ? d.dia === dia && d.mes === mesHoje : false; });
+                  const recs = clientes.filter(c => { const d = c.receita ? parseData(c.receita) : null; return d ? d.dia === dia && d.mes === mesHoje : false; });
                   return (
                     <div key={dia} onClick={() => setDiaSelecionado(dia)} className={`bg-white min-h-[100px] p-3 cursor-pointer hover:bg-slate-50 transition-colors group relative ${dia === diaHoje ? "ring-2 ring-inset ring-indigo-500" : ""}`}>
                       <span className={`text-xs font-bold ${dia === diaHoje ? "text-indigo-600" : "text-slate-400"}`}>{dia}</span>
@@ -1300,7 +1300,7 @@ export default function CRM() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-3">
                       <p className="text-[10px] font-bold text-emerald-600 uppercase">Aniversariantes</p>
-                      {clientes.filter(c => { const d = parseData(c.nascimento); return d ? d.dia === diaSelecionado && d.mes === mesHoje : false; }).map(c => {
+                      {clientes.filter(c => { const d = c.nascimento ? parseData(c.nascimento) : null; return d ? d.dia === diaSelecionado && d.mes === mesHoje : false; }).map(c => {
                         const status = getStatus(c.id);
                         return (
                           <div key={c.id} className="bg-white p-3 rounded-lg shadow-sm border border-emerald-100 flex items-center justify-between">
@@ -1317,7 +1317,7 @@ export default function CRM() {
                     </div>
                     <div className="space-y-3">
                       <p className="text-[10px] font-bold text-red-600 uppercase">Receitas</p>
-                      {clientes.filter(c => { const d = parseData(c.receita); return d ? d.dia === diaSelecionado && d.mes === mesHoje : false; }).map(c => {
+                      {clientes.filter(c => { const d = c.receita ? parseData(c.receita) : null; return d ? d.dia === diaSelecionado && d.mes === mesHoje : false; }).map(c => {
                         const status = getStatus(c.id);
                         return (
                           <div key={c.id} className="bg-white p-3 rounded-lg shadow-sm border border-red-100 flex items-center justify-between">
