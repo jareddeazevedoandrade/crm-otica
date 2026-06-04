@@ -6,12 +6,21 @@ import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import Image from "next/image";
 
+type Lembrete = {
+  id: number;
+  cliente_id: number;
+  texto: string;
+  data_lembrete: string;
+  concluido: boolean;
+};
+
 type Cliente = {
   id: number;
   nome: string;
-  nascimento: string;
-  receita: string;
+  nascimento: string | null;
+  receita: string | null;
   telefone: string;
+  observacoes: string | null;
 };
 
 export default function CRM() {
@@ -27,6 +36,15 @@ export default function CRM() {
   const [nascimento, setNascimento] = useState("");
   const [receita, setReceita] = useState("");
   const [telefone, setTelefone] = useState("");
+  const [observacoes, setObservacoes] = useState("");
+
+  // Notificação de boas-vindas
+  const [notificacao, setNotificacao] = useState<{ aniversariantes: number; receitasSemana: number } | null>(null);
+
+  // Modal de observações
+  const [obsClienteId, setObsClienteId] = useState<number | null>(null);
+  const [obsTexto, setObsTexto] = useState("");
+  const [obsSalvando, setObsSalvando] = useState(false);
 
   // Checkboxes interligados (Hoje)
   const [statusEnvio, setStatusEnvio] = useState<Record<number, { 
@@ -63,6 +81,12 @@ export default function CRM() {
   // Modal de histórico de contatos
   const [historicoClienteId, setHistoricoClienteId] = useState<number | null>(null);
   const [historicoData, setHistoricoData] = useState<{ tipo_envio: string; data_marcacao: string }[]>([]);
+
+  // Lembretes
+  const [lembretes, setLembretes] = useState<Lembrete[]>([]);
+  const [modalLembreteClienteId, setModalLembreteClienteId] = useState<number | null>(null);
+  const [novoLembreteTexto, setNovoLembreteTexto] = useState("");
+  const [novoLembreteData, setNovoLembreteData] = useState("");
 
   useEffect(() => {
     const emailsPermitidos = [
@@ -178,6 +202,14 @@ export default function CRM() {
         });
         setRespostas(novasRespostas);
       }
+
+      // 4. Carregar lembretes
+      const { data: lembretesData } = await supabase
+        .from("lembretes")
+        .select("*")
+        .eq("concluido", false)
+        .order("data_lembrete", { ascending: true });
+      if (lembretesData) setLembretes(lembretesData);
     }
     carregarDados();
   }, [session]);
@@ -197,29 +229,46 @@ export default function CRM() {
   };
 
   const limpar = () => {
-    setNome(""); setNascimento(""); setReceita(""); setTelefone(""); setEditandoId(null);
+    setNome(""); setNascimento(""); setReceita(""); setTelefone(""); setObservacoes(""); setEditandoId(null);
   };
 
   const editar = (c: Cliente) => {
     setEditandoId(c.id);
     setNome(c.nome);
-    setNascimento(c.nascimento);
-    setReceita(c.receita);
+    setNascimento(c.nascimento || "");
+    setReceita(c.receita || "");
     setTelefone(c.telefone);
+    setObservacoes(c.observacoes || "");
   };
 
   const salvar = async () => {
-    if (!nome || !nascimento || !receita || !telefone) return;
+    if (!nome || !telefone) return;
+    const payload = {
+      nome,
+      nascimento: nascimento || null,
+      receita: receita || null,
+      telefone,
+      observacoes: observacoes || null,
+    };
     if (editandoId) {
-      const { error } = await supabase.from("clientes").update({ nome, nascimento, receita, telefone }).eq("id", editandoId);
+      const { error } = await supabase.from("clientes").update(payload).eq("id", editandoId);
       if (error) return;
-      setClientes((prev) => prev.map((c) => c.id === editandoId ? { ...c, nome, nascimento, receita, telefone } : c));
+      setClientes((prev) => prev.map((c) => c.id === editandoId ? { ...c, ...payload } : c));
     } else {
-      const { data, error } = await supabase.from("clientes").insert([{ nome, nascimento, receita, telefone }]).select();
+      const { data, error } = await supabase.from("clientes").insert([payload]).select();
       if (error) return;
       if (data) setClientes((prev) => [...prev, ...data]);
     }
     limpar();
+  };
+
+  // SALVAR OBSERVAÇÃO INLINE
+  const salvarObservacao = async (clienteId: number, texto: string) => {
+    setObsSalvando(true);
+    await supabase.from("clientes").update({ observacoes: texto || null }).eq("id", clienteId);
+    setClientes(prev => prev.map(c => c.id === clienteId ? { ...c, observacoes: texto || null } : c));
+    setObsSalvando(false);
+    setObsClienteId(null);
   };
 
   const excluir = async (id: number) => {
@@ -239,17 +288,20 @@ export default function CRM() {
     return { dia: Number(p[0]), mes: Number(p[1]), ano: Number(p[2]) };
   };
 
-  const isAniversarioMes = (data: string) => {
+  const isAniversarioMes = (data: string | null) => {
+    if (!data) return false;
     const d = parseData(data);
     return d ? d.mes === mesHoje : false;
   };
 
-  const isAniversarioHoje = (data: string) => {
+  const isAniversarioHoje = (data: string | null) => {
+    if (!data) return false;
     const d = parseData(data);
     return d ? d.dia === diaHoje && d.mes === mesHoje : false;
   };
 
-  const diasPassadosReceita = (data: string) => {
+  const diasPassadosReceita = (data: string | null) => {
+    if (!data) return null;
     const d = parseData(data);
     if (!d) return null;
     const dataBase = new Date(d.ano, d.mes - 1, d.dia);
@@ -257,27 +309,30 @@ export default function CRM() {
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const getStatusReceita = (data: string) => {
+  const getStatusReceita = (data: string | null) => {
+    if (!data) return null;
     const dias = diasPassadosReceita(data);
     if (dias === null) return null;
 
     if (dias >= 365 && dias < 366) return "VENCE HOJE!";
-    if (dias > 350 && dias < 365) return `Vence em ${365 - dias} dias`;
+    if (dias >= 345 && dias < 365) return `Vence em ${365 - dias} dias`;
     if (dias > 365) return `Venceu - ${dias - 365} dias`;
     return null;
   };
 
-  const isReceitaParaVencer = (data: string) => {
-    const status = getStatusReceita(data);
-    return status?.startsWith("Vence em") || status === "VENCE HOJE!" || status?.startsWith("Venceu");
+  const isReceitaParaVencer = (data: string | null) => {
+    if (!data) return false;
+    const dias = diasPassadosReceita(data);
+    return dias !== null && dias >= 345 && dias < 365;
   };
 
-  const isReceitaHoje = (data: string) => {
+  const isReceitaHoje = (data: string | null) => {
+    if (!data) return false;
     const status = getStatusReceita(data);
     return status === "VENCE HOJE!";
   };
 
-  const isReceitaVencidaTotal = (data: string) => {
+  const isReceitaVencidaTotal = (data: string | null) => {
     const dias = diasPassadosReceita(data);
     return dias !== null && dias > 365;
   };
@@ -349,8 +404,8 @@ export default function CRM() {
       return getMsgReceitaVencida(nomeCompleto, dias - 365);
     }
 
-    // Receita prestes a vencer (350-365 dias)
-    if (dias > 350 && dias < 365) {
+    // Receita prestes a vencer (345-364 dias)
+    if (dias >= 345 && dias < 365) {
       const diasFaltando = 365 - dias;
       return getMsgReceitaProximaVencer(nomeCompleto, diasFaltando);
     }
@@ -457,6 +512,34 @@ export default function CRM() {
       setHistoricoHojeData(resultado);
     }
   };
+
+  // CRIAR LEMBRETE
+  const criarLembrete = async () => {
+    if (!novoLembreteTexto || !novoLembreteData || !modalLembreteClienteId) return;
+    const { data, error } = await supabase.from("lembretes").insert([{
+      cliente_id: modalLembreteClienteId,
+      texto: novoLembreteTexto,
+      data_lembrete: novoLembreteData,
+      concluido: false,
+    }]).select();
+    if (!error && data) {
+      setLembretes(prev => [...prev, ...data]);
+      setNovoLembreteTexto("");
+      setNovoLembreteData("");
+      setModalLembreteClienteId(null);
+    }
+  };
+
+  // CONCLUIR LEMBRETE
+  const concluirLembrete = async (id: number) => {
+    await supabase.from("lembretes").update({ concluido: true }).eq("id", id);
+    setLembretes(prev => prev.filter(l => l.id !== id));
+  };
+
+  // LEMBRETES DE HOJE (reativo)
+  const _hoje = new Date();
+  const hojeISO = `${_hoje.getFullYear()}-${String(_hoje.getMonth()+1).padStart(2,'0')}-${String(_hoje.getDate()).padStart(2,'0')}`;
+  const lembretesHoje = useMemo(() => lembretes.filter(l => l.data_lembrete === hojeISO), [lembretes]);
 
   const TIPO_LABEL: Record<string, { label: string; color: string }> = {
     aniversarioNoDia: { label: "🎂 Aniversário (Hoje)", color: "bg-emerald-100 text-emerald-700" },
@@ -584,6 +667,38 @@ export default function CRM() {
   // Reset para página 1 quando filtro/pesquisa/ordem mudam
   useEffect(() => { setPaginaAtual(1); }, [filtro, pesquisa, sortOrder]);
 
+  // NOTIFICAÇÃO DE BOAS-VINDAS — aparece só uma vez por sessão
+  useEffect(() => {
+    if (clientes.length === 0) return;
+    const jaExibiu = sessionStorage.getItem("notificacao_exibida");
+    if (jaExibiu) return;
+    const aniversariantes = clientes.filter(c => isAniversarioHoje(c.nascimento)).length;
+    const receitasSemana = clientes.filter(c => {
+      const dias = diasPassadosReceita(c.receita);
+      return dias !== null && dias >= 345 && dias <= 372;
+    }).length;
+    const lembretesHojeCount = lembretes.filter(l => l.data_lembrete === new Date().toISOString().slice(0,10)).length;
+    if (aniversariantes > 0 || receitasSemana > 0 || lembretesHojeCount > 0) {
+      setNotificacao({ aniversariantes, receitasSemana });
+      sessionStorage.setItem("notificacao_exibida", "1");
+      setTimeout(() => setNotificacao(null), 7000);
+    }
+  }, [clientes]);
+
+  // SAUDAÇÃO DINÂMICA
+  const getSaudacao = () => {
+    const hora = new Date().getHours();
+    if (hora >= 5 && hora < 12) return "Bom dia";
+    if (hora >= 12 && hora < 18) return "Boa tarde";
+    return "Boa noite";
+  };
+  const getSaudacaoEmoji = () => {
+    const hora = new Date().getHours();
+    if (hora >= 5 && hora < 12) return "☀️";
+    if (hora >= 12 && hora < 18) return "🌤️";
+    return "🌙";
+  };
+
   // PAGINAÇÃO
   const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAGINA);
   const paginado = filtrados.slice((paginaAtual - 1) * ITENS_POR_PAGINA, paginaAtual * ITENS_POR_PAGINA);
@@ -603,19 +718,22 @@ export default function CRM() {
     return idsContatados.size;
   }, [statusEnvio, statusEnvioIndependente]);
 
-  // CORREÇÃO 2: Contatados hoje conta tanto "Hoje" quanto "Controle Mensal", sem duplicar por cliente
+  // CORREÇÃO 2: Contatados hoje — usa data local (não UTC) para evitar bug de fuso horário
   const contatadosHojeCount = useMemo(() => {
-    const hojeFormatado = new Date().toISOString().slice(0, 10);
+    const agora = new Date();
+    const hojeLocal = `${agora.getFullYear()}-${String(agora.getMonth()+1).padStart(2,'0')}-${String(agora.getDate()).padStart(2,'0')}`;
     const idsContatados = new Set<string>();
 
     Object.entries(statusEnvio).forEach(([id, status]) => {
-      if ((status.aniversarioNoDia || status.receitaNoDia) && status.data_marcacao === hojeFormatado) {
+      const dm = status.data_marcacao?.slice(0,10);
+      if ((status.aniversarioNoDia || status.receitaNoDia) && dm === hojeLocal) {
         idsContatados.add(id);
       }
     });
 
     Object.entries(statusEnvioIndependente).forEach(([id, status]) => {
-      if ((status.aniversarioMes || status.receitaAntecipada) && status.data_marcacao === hojeFormatado) {
+      const dm = status.data_marcacao?.slice(0,10);
+      if ((status.aniversarioMes || status.receitaAntecipada) && dm === hojeLocal) {
         idsContatados.add(id);
       }
     });
@@ -801,13 +919,17 @@ export default function CRM() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Data Nascimento</label>
-                        <input value={nascimento} onChange={(e) => setNascimento(formatarData(e.target.value))} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all" />
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Data Nascimento <span className="text-slate-300 normal-case font-normal">(opcional)</span></label>
+                        <input value={nascimento} onChange={(e) => setNascimento(formatarData(e.target.value))} placeholder="dd/mm/aaaa" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Data da Receita</label>
-                        <input value={receita} onChange={(e) => setReceita(formatarData(e.target.value))} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all" />
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Data da Receita <span className="text-slate-300 normal-case font-normal">(opcional)</span></label>
+                        <input value={receita} onChange={(e) => setReceita(formatarData(e.target.value))} placeholder="dd/mm/aaaa" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all" />
                       </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Observações <span className="text-slate-300 normal-case font-normal">(opcional)</span></label>
+                      <input value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Ex: prefere contato à tarde..." className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all" />
                     </div>
                     <div className="pt-2 flex gap-3">
                       <button onClick={salvar} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-bold shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all">
@@ -819,11 +941,38 @@ export default function CRM() {
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                  <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2">
+                  <h3 className="font-bold text-slate-900 mb-1 flex items-center gap-2">
                     <span className="w-1.5 h-6 bg-emerald-600 rounded-full"></span>
-                    Alertas de Hoje ({diaHoje}/{mesHoje})
+                    {getSaudacao()}! {getSaudacaoEmoji()}
                   </h3>
+                  {/* MUDANÇA: data completa com zero à esquerda e ano */}
+                  <p className="text-xs text-slate-400 font-medium mb-5">Alertas de hoje — {String(diaHoje).padStart(2, '0')}/{String(mesHoje).padStart(2, '0')}/{hoje.getFullYear()}</p>
                   <div className="space-y-3">
+                    {/* LEMBRETES DO DIA — aparecem primeiro, acima dos aniversários e receitas */}
+                    {lembretesHoje.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-violet-500 uppercase tracking-wider mb-2">🔔 Lembretes de hoje</p>
+                        <div className="space-y-2">
+                          {lembretesHoje.map(l => {
+                            const clienteNome = clientes.find(c => c.id === l.cliente_id)?.nome || "";
+                            return (
+                              <div key={l.id} className="flex items-start justify-between p-3 bg-violet-50 rounded-lg border border-violet-100 gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-bold text-violet-900 truncate">{clienteNome}</p>
+                                  <p className="text-[11px] text-violet-700 mt-0.5">{l.texto}</p>
+                                </div>
+                                <button
+                                  onClick={() => concluirLembrete(l.id)}
+                                  className="shrink-0 w-6 h-6 rounded-full border-2 border-violet-300 hover:bg-violet-500 hover:border-violet-500 transition-all flex items-center justify-center text-white text-[10px]"
+                                  title="Marcar como concluído"
+                                >✓</button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {clientes.filter(c => isAniversarioHoje(c.nascimento) || isReceitaHoje(c.receita)).map(c => {
                       const status = getStatus(c.id);
                       const anivHoje = isAniversarioHoje(c.nascimento);
@@ -881,7 +1030,7 @@ export default function CRM() {
                       }
                       return null;
                     })}
-                    {clientes.filter(c => isAniversarioHoje(c.nascimento) || isReceitaHoje(c.receita)).length === 0 && (
+                    {clientes.filter(c => isAniversarioHoje(c.nascimento) || isReceitaHoje(c.receita)).length === 0 && lembretesHoje.length === 0 && (
                       <div className="py-10 text-center"><p className="text-slate-400 text-sm">Nenhum alerta crítico para hoje.</p></div>
                     )}
                   </div>
@@ -923,118 +1072,146 @@ export default function CRM() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Envio (Hoje)</th>
-                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Controle (Mensal/Ant.)</th>
-                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cliente</th>
-                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contato</th>
-                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Datas</th>
-                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>Status {sortOrder === 'asc' ? '▲' : '▼'}</th>
-                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {paginado.map((c) => {
-                      const anivHoje = isAniversarioHoje(c.nascimento);
-                      const recHoje = isReceitaHoje(c.receita);
-                      const anivMes = isAniversarioMes(c.nascimento);
-                      const recAnt = isReceitaParaVencer(c.receita);
-                      const status = getStatus(c.id);
-                      const statusInd = getStatusInd(c.id);
-                      const statusRecText = getStatusReceita(c.receita);
-                      
-                      return (
-                        <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex gap-2">
-                              {anivHoje && <input type="checkbox" checked={status.aniversarioNoDia} onChange={() => marcarEnviado(c.id, "aniversarioNoDia")} className="rounded text-emerald-600 w-4 h-4 cursor-pointer" title="Marcar Aniversário Enviado" />}
-                              {recHoje && <input type="checkbox" checked={status.receitaNoDia} onChange={() => marcarEnviado(c.id, "receitaNoDia")} className="rounded text-red-600 w-4 h-4 cursor-pointer" title="Marcar Receita Enviada" />}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex gap-2">
-                              {anivMes && <input type="checkbox" checked={statusInd.aniversarioMes} onChange={() => marcarEnviadoIndependente(c.id, "aniversarioMes")} className="rounded text-indigo-400 w-4 h-4 cursor-pointer" title="Controle Mensal Aniversário" />}
-                              {recAnt && <input type="checkbox" checked={statusInd.receitaAntecipada} onChange={() => marcarEnviadoIndependente(c.id, "receitaAntecipada")} className="rounded text-orange-400 w-4 h-4 cursor-pointer" title="Controle Antecipado Receita" />}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className={`text-sm font-bold text-slate-900 ${(anivHoje && status.aniversarioNoDia) || (recHoje && status.receitaNoDia) ? "line-through opacity-50" : ""}`}>{c.nome}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">ID: #{c.id}</p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm text-slate-600 font-medium whitespace-nowrap">{c.telefone}</p>
-                              <button onClick={() => whatsapp(c.telefone)} className="text-[10px] font-bold text-indigo-600 hover:underline">WhatsApp</button>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-1">
-                                <span className="text-[11px] text-slate-600 font-medium">🎂 {c.nascimento}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[11px] text-slate-600 font-medium">📄 {c.receita}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-wrap gap-1.5">
-                              {anivHoje && <span className={`px-2 py-0.5 bg-emerald-500 text-white text-[9px] font-bold rounded-full uppercase ${(status.aniversarioNoDia || statusInd.aniversarioMes) ? "line-through opacity-50" : ""}`}>Aniv. HOJE!</span>}
-                              {statusRecText && <span className={`px-2 py-0.5 text-white text-[9px] font-bold rounded-full uppercase ${statusRecText === "VENCE HOJE!" ? "bg-red-500" : statusRecText.includes("Venceu") ? "bg-red-800" : "bg-red-400"} ${(status.receitaNoDia || statusInd.receitaAntecipada) ? "line-through opacity-50" : ""}`}>{statusRecText}</span>}
-                              {anivMes && !anivHoje && <span className={`px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded-full uppercase ${statusInd.aniversarioMes ? "line-through opacity-50" : ""}`}>Aniv. do Mês</span>}
-                            </div>
-                            {/* BOTÕES DE RESPOSTA — aparecem quando qualquer checkbox estiver marcada */}
-                            {(status.aniversarioNoDia || status.receitaNoDia || statusInd.aniversarioMes || statusInd.receitaAntecipada) && (
-                              <div className="flex gap-1 mt-2">
-                                <button
-                                  onClick={() => salvarResposta(c.id, "pendente")}
-                                  title="Sem resposta"
-                                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold border transition-all ${respostas[c.id] === undefined || respostas[c.id] === "pendente" ? "bg-slate-100 border-slate-300 text-slate-500" : "border-transparent text-slate-300 hover:text-slate-500"}`}
-                                >💬 Pendente</button>
-                                <button
-                                  onClick={() => salvarResposta(c.id, "interessado")}
-                                  title="Cliente interessado"
-                                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold border transition-all ${respostas[c.id] === "interessado" ? "bg-amber-100 border-amber-300 text-amber-700" : "border-transparent text-slate-300 hover:text-amber-500"}`}
-                                >👍 Interessado</button>
-                                <button
-                                  onClick={() => salvarResposta(c.id, "recusou")}
-                                  title="Cliente não respondeu / recusou"
-                                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold border transition-all ${respostas[c.id] === "recusou" ? "bg-red-100 border-red-300 text-red-600" : "border-transparent text-slate-300 hover:text-red-400"}`}
-                                >❌ Recusou</button>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {(anivMes && statusRecText) ? (
-                                <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento), c.nome, "Aniversário + Receita")} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem Combinada">
-                                  <WhatsAppIconBlue />
-                                </button>
-                              ) : (
-                                <>
-                                  {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento), c.nome, "Aniversário")} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Aniversário">
-                                    <WhatsAppIcon />
-                                  </button>}
-                                  {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita), c.nome, "Receita")} className="hover:scale-110 transition-transform p-1" title="Enviar Mensagem de Receita">
-                                    <WhatsAppIconRed />
-                                  </button>}
-                                </>
-                              )}
-                              <button onClick={() => abrirHistorico(c.id)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Ver histórico de contatos">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                              </button>
-                              <button onClick={() => { editar(c); setAbaAtiva("dashboard"); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">✏️</button>
-                              <button onClick={() => excluir(c.id)} className="p-2 text-red-400 hover:text-red-600 transition-colors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 7H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 7H12H18V18C18 19.6569 16.6569 21 15 21H9C7.34315 21 6 19.6569 6 18V7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 5C9 4.44772 9.44772 4 10 4H14C14.5523 4 15 4.44772 15 5V7H9V5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              {/* HEADER DA LISTA */}
+              <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                <div className="col-span-1 text-center">Hoje</div>
+                <div className="col-span-1 text-center">Mês</div>
+                <div className="col-span-3">Cliente</div>
+                <div className="col-span-2">Contato</div>
+                <div className="col-span-2">Datas</div>
+                <div className="col-span-2 cursor-pointer select-none" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>Status {sortOrder === 'asc' ? '▲' : '▼'}</div>
+                <div className="col-span-1 text-right">Ações</div>
+              </div>
+
+              {/* LISTA DE CLIENTES */}
+              <div className="divide-y divide-slate-50">
+                {paginado.map((c) => {
+                  const anivHoje = isAniversarioHoje(c.nascimento);
+                  const recHoje = isReceitaHoje(c.receita);
+                  const anivMes = isAniversarioMes(c.nascimento);
+                  const recAnt = isReceitaParaVencer(c.receita);
+                  const recVencida = isReceitaVencidaTotal(c.receita);
+                  const status = getStatus(c.id);
+                  const statusInd = getStatusInd(c.id);
+                  const statusRecText = getStatusReceita(c.receita);
+                  const temCheckbox = status.aniversarioNoDia || status.receitaNoDia || statusInd.aniversarioMes || statusInd.receitaAntecipada;
+                  const followUpDias = (() => {
+                    if (respostas[c.id] !== "interessado") return null;
+                    const entry = Object.entries(statusEnvio).find(([id]) => Number(id) === c.id);
+                    const dataMarcacao = entry?.[1]?.data_marcacao;
+                    if (!dataMarcacao) return null;
+                    const d = Math.floor((new Date().getTime() - new Date(dataMarcacao + "T12:00:00").getTime()) / (1000 * 60 * 60 * 24));
+                    return d >= 3 ? d : null;
+                  })();
+
+                  return (
+                    <div key={c.id} className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-slate-50 transition-colors items-start">
+
+                      {/* HOJE — MUDANÇA: accent-emerald-600 (era accent-blue-600 no combinado) e accent-emerald-600 mantido nos individuais */}
+                      <div className="col-span-1 flex flex-col gap-2 items-center pt-1">
+                        {(anivHoje && recHoje) ? (
+                          <input type="checkbox" checked={status.aniversarioNoDia && status.receitaNoDia} onChange={() => { marcarEnviado(c.id, "aniversarioNoDia"); marcarEnviado(c.id, "receitaNoDia"); }} className="w-4 h-4 cursor-pointer accent-emerald-600" title="Aniversário + Receita enviados" />
+                        ) : (
+                          <>
+                            {anivHoje && <input type="checkbox" checked={status.aniversarioNoDia} onChange={() => marcarEnviado(c.id, "aniversarioNoDia")} className="w-4 h-4 cursor-pointer accent-emerald-600" title="🎂 Aniversário enviado" />}
+                            {recHoje && <input type="checkbox" checked={status.receitaNoDia} onChange={() => marcarEnviado(c.id, "receitaNoDia")} className="w-4 h-4 cursor-pointer accent-emerald-600" title="🚨 Receita enviada" />}
+                          </>
+                        )}
+                      </div>
+
+                      {/* MÊS — MUDANÇA: accent-emerald-500 (era accent-indigo-500) e accent-red-500 (era accent-orange-500) */}
+                      <div className="col-span-1 flex flex-col gap-2 items-center pt-1">
+                        {anivMes && <input type="checkbox" checked={statusInd.aniversarioMes} onChange={() => marcarEnviadoIndependente(c.id, "aniversarioMes")} className="w-4 h-4 cursor-pointer accent-emerald-500" title="🎉 Controle Aniversário do Mês" />}
+                        {(recAnt || recVencida) && <input type="checkbox" checked={statusInd.receitaAntecipada} onChange={() => marcarEnviadoIndependente(c.id, "receitaAntecipada")} className="w-4 h-4 cursor-pointer accent-red-500" title="📄 Controle Receita" />}
+                      </div>
+
+                      {/* CLIENTE */}
+                      <div className="col-span-3 min-w-0">
+                        {(() => {
+                          const cortado = (anivHoje && status.aniversarioNoDia) || (recHoje && status.receitaNoDia) || ((recVencida || recAnt) && statusInd.receitaAntecipada) || (anivMes && statusInd.aniversarioMes);
+                          const palavras = c.nome.split(" ");
+                          const metade = Math.ceil(palavras.length / 2);
+                          return (<>
+                            <p className={`text-xs font-bold text-slate-900 leading-tight ${cortado ? "line-through opacity-50" : ""}`}>{palavras.slice(0, metade).join(" ")}</p>
+                            <p className={`text-xs font-bold text-slate-700 leading-tight ${cortado ? "line-through opacity-50" : ""}`}>{palavras.slice(metade).join(" ")}</p>
+                          </>);
+                        })()}
+                        <p className="text-[10px] text-slate-400 mt-0.5">#{c.id}</p>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {followUpDias && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 border border-amber-300 text-amber-700 text-[9px] font-bold rounded-full">⏰ {followUpDias}d</span>}
+                          {lembretes.filter(l => l.cliente_id === c.id).length > 0 && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-violet-100 border border-violet-200 text-violet-700 text-[9px] font-bold rounded-full">🔔 {lembretes.filter(l => l.cliente_id === c.id).length}</span>}
+                        </div>
+                        {c.observacoes && <p className="text-[10px] text-slate-400 mt-0.5 italic truncate" title={c.observacoes}>📝 {c.observacoes}</p>}
+                      </div>
+
+                      {/* CONTATO */}
+                      <div className="col-span-2 min-w-0">
+                        <p className="text-xs text-slate-600 font-medium truncate">{c.telefone}</p>
+                        <button onClick={() => whatsapp(c.telefone)} className="text-[10px] font-bold text-indigo-500 hover:underline">WhatsApp</button>
+                      </div>
+
+                      {/* DATAS */}
+                      <div className="col-span-2 min-w-0">
+                        {c.nascimento && <p className="text-[11px] text-slate-500 truncate">🎂 {c.nascimento}</p>}
+                        {c.receita && <p className="text-[11px] text-slate-500 truncate">📄 {c.receita}</p>}
+                      </div>
+
+                      {/* STATUS + RESPOSTA */}
+                      <div className="col-span-2">
+                        <div className="flex flex-wrap gap-1">
+                          {anivHoje && <span className={`px-1.5 py-0.5 bg-emerald-500 text-white text-[9px] font-bold rounded-full uppercase ${(status.aniversarioNoDia || statusInd.aniversarioMes) ? "line-through opacity-50" : ""}`}>Aniv. HOJE!</span>}
+                          {statusRecText && <span className={`px-1.5 py-0.5 text-white text-[9px] font-bold rounded-full uppercase ${statusRecText === "VENCE HOJE!" ? "bg-red-500" : statusRecText.includes("Venceu") ? "bg-red-800" : "bg-red-400"} ${(status.receitaNoDia || statusInd.receitaAntecipada) ? "line-through opacity-40" : ""}`}>{statusRecText}</span>}
+                          {anivMes && !anivHoje && <span className={`px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded-full uppercase ${statusInd.aniversarioMes ? "line-through opacity-50" : ""}`}>Aniv. Mês</span>}
+                        </div>
+                        {temCheckbox && (
+                          <div className="flex gap-1 mt-1.5">
+                            <button onClick={() => salvarResposta(c.id, "pendente")} title="Pendente" className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-lg text-[9px] font-bold border transition-all ${!respostas[c.id] || respostas[c.id] === "pendente" ? "bg-slate-100 border-slate-300 text-slate-500" : "border-transparent text-slate-200 hover:bg-slate-50 hover:text-slate-400"}`}>
+                              <span>💬</span><span>Pend.</span>
+                            </button>
+                            <button onClick={() => salvarResposta(c.id, "interessado")} title="Interessado" className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-lg text-[9px] font-bold border transition-all ${respostas[c.id] === "interessado" ? "bg-amber-100 border-amber-300 text-amber-700" : "border-transparent text-slate-200 hover:bg-amber-50 hover:text-amber-500"}`}>
+                              <span>👍</span><span>Inter.</span>
+                            </button>
+                            <button onClick={() => salvarResposta(c.id, "recusou")} title="Recusou" className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-lg text-[9px] font-bold border transition-all ${respostas[c.id] === "recusou" ? "bg-red-100 border-red-300 text-red-600" : "border-transparent text-slate-200 hover:bg-red-50 hover:text-red-400"}`}>
+                              <span>❌</span><span>Recus.</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* AÇÕES */}
+                      <div className="col-span-1 flex flex-col gap-1 items-end">
+                        {/* LINHA 1: WA link + histórico + observações */}
+                        <div className="flex gap-0.5 items-center">
+                          {(anivMes && statusRecText) ? (
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento), c.nome, "Aniversário + Receita")} className="p-1 hover:scale-110 transition-transform" title="Mensagem combinada"><WhatsAppIconBlue /></button>
+                          ) : (
+                            <>
+                              {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento), c.nome, "Aniversário")} className="p-1 hover:scale-110 transition-transform" title="Aniversário"><WhatsAppIcon /></button>}
+                              {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita), c.nome, "Receita")} className="p-1 hover:scale-110 transition-transform" title="Receita"><WhatsAppIconRed /></button>}
+                            </>
+                          )}
+                          <button onClick={() => abrirHistorico(c.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition-colors" title="Histórico">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                          </button>
+                          <button onClick={() => { setObsClienteId(c.id); setObsTexto(c.observacoes || ""); }} className={`p-1.5 rounded-lg hover:bg-slate-100 transition-colors ${c.observacoes ? "text-amber-400" : "text-slate-300 hover:text-slate-500"}`} title="Observações">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          </button>
+                        </div>
+                        {/* LINHA 2: editar + lembrete + lixeira */}
+                        <div className="flex gap-0.5 items-center">
+                          <button onClick={() => { editar(c); setAbaAtiva("dashboard"); }} className="p-1.5 text-slate-300 hover:text-indigo-500 rounded-lg hover:bg-slate-100 transition-colors text-sm" title="Editar">✏️</button>
+                          <button onClick={() => { setModalLembreteClienteId(c.id); setNovoLembreteTexto(""); setNovoLembreteData(""); }} className={`p-1.5 rounded-lg hover:bg-slate-100 transition-colors ${lembretes.some(l => l.cliente_id === c.id) ? "text-violet-400" : "text-slate-300 hover:text-slate-500"}`} title="Lembrete">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                          </button>
+                          <button onClick={() => excluir(c.id)} className="p-1.5 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors" title="Excluir">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          </button>
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })}
               </div>
 
               {/* PAGINAÇÃO */}
@@ -1162,6 +1339,136 @@ export default function CRM() {
           )}
         </div>
       </main>
+      {/* NOTIFICAÇÃO DE BOAS-VINDAS */}
+      {notificacao && (
+        <div className="fixed top-20 right-6 z-50 bg-white rounded-2xl shadow-2xl border border-slate-100 p-5 w-80 animate-in slide-in-from-top-4 duration-500">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-lg shrink-0">👋</div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-slate-900 mb-2">{getSaudacao()}! Confira os alertas de hoje:</p>
+              <div className="space-y-1.5">
+                {notificacao.aniversariantes > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-100">
+                    <span>🎂</span>
+                    <p className="text-xs font-semibold text-emerald-700">{notificacao.aniversariantes} aniversariante{notificacao.aniversariantes > 1 ? "s" : ""} hoje</p>
+                  </div>
+                )}
+                {notificacao.receitasSemana > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 rounded-lg border border-red-100">
+                    <span>📄</span>
+                    <p className="text-xs font-semibold text-red-700">{notificacao.receitasSemana} receita{notificacao.receitasSemana > 1 ? "s" : ""} vencendo esta semana</p>
+                  </div>
+                )}
+                {lembretesHoje.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-lg border border-violet-100">
+                    <span>🔔</span>
+                    <p className="text-xs font-semibold text-violet-700">{lembretesHoje.length} lembrete{lembretesHoje.length > 1 ? "s" : ""} agendado{lembretesHoje.length > 1 ? "s" : ""} para hoje</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <button onClick={() => setNotificacao(null)} className="text-slate-300 hover:text-slate-500 text-lg font-bold leading-none">✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE LEMBRETE */}
+      {modalLembreteClienteId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setModalLembreteClienteId(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-violet-500 rounded-full"></span>
+                Novo Lembrete
+                <span className="text-xs font-medium text-slate-400 ml-1">
+                  · {clientes.find(c => c.id === modalLembreteClienteId)?.nome.split(" ").slice(0,2).join(" ")}
+                </span>
+              </h3>
+              <button onClick={() => setModalLembreteClienteId(null)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+
+            {/* LEMBRETES EXISTENTES DO CLIENTE */}
+            {lembretes.filter(l => l.cliente_id === modalLembreteClienteId).length > 0 && (
+              <div className="mb-4 space-y-2">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Lembretes pendentes</p>
+                {lembretes.filter(l => l.cliente_id === modalLembreteClienteId).map(l => (
+                  <div key={l.id} className="flex items-center justify-between px-3 py-2 bg-violet-50 rounded-lg border border-violet-100">
+                    <div>
+                      <p className="text-xs text-violet-800 font-semibold">{l.texto}</p>
+                      <p className="text-[10px] text-violet-500">{new Date(l.data_lembrete + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                    </div>
+                    <button onClick={() => concluirLembrete(l.id)} className="w-6 h-6 rounded-full border-2 border-violet-300 hover:bg-violet-500 hover:border-violet-500 transition-all flex items-center justify-center text-violet-500 hover:text-white text-[10px] font-bold">✓</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Descrição do lembrete</label>
+                <input
+                  value={novoLembreteTexto}
+                  onChange={(e) => setNovoLembreteTexto(e.target.value)}
+                  placeholder="Ex: Ligar para relembrar de fazer os óculos..."
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-violet-400 outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Data do alerta</label>
+                <input
+                  type="date"
+                  value={novoLembreteData}
+                  onChange={(e) => setNovoLembreteData(e.target.value)}
+                  min={new Date().toISOString().slice(0, 10)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-violet-400 outline-none transition-all"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={criarLembrete}
+                disabled={!novoLembreteTexto || !novoLembreteData}
+                className="flex-1 bg-violet-500 hover:bg-violet-600 text-white py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >🔔 Agendar lembrete</button>
+              <button onClick={() => setModalLembreteClienteId(null)} className="px-6 bg-slate-100 text-slate-600 py-2 rounded-lg text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE OBSERVAÇÕES */}
+      {obsClienteId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setObsClienteId(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-amber-400 rounded-full"></span>
+                Observações
+                <span className="text-xs font-medium text-slate-400 ml-1">
+                  · {clientes.find(c => c.id === obsClienteId)?.nome.split(" ").slice(0,2).join(" ")}
+                </span>
+              </h3>
+              <button onClick={() => setObsClienteId(null)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+            <textarea
+              value={obsTexto}
+              onChange={(e) => setObsTexto(e.target.value)}
+              placeholder="Ex: prefere contato à tarde, marido também é cliente, comprou armação importada..."
+              rows={4}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-amber-400 outline-none transition-all resize-none"
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => salvarObservacao(obsClienteId, obsTexto)}
+                disabled={obsSalvando}
+                className="flex-1 bg-amber-400 hover:bg-amber-500 text-white py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
+              >{obsSalvando ? "Salvando..." : "Salvar"}</button>
+              <button onClick={() => setObsClienteId(null)} className="px-6 bg-slate-100 text-slate-600 py-2 rounded-lg text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL HISTÓRICO DIÁRIO DE CONTATADOS */}
       {modalHistoricoHoje && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setModalHistoricoHoje(false)}>
