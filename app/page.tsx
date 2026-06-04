@@ -988,7 +988,7 @@ export default function CRM() {
                                 <p className="text-[10px] text-blue-600 font-medium">🎉 Aniversário + Receita Vencida!</p>
                               </div>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento), c.nome, "Aniversário + Receita")} className="hover:scale-110 transition-transform p-1">
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome || "", c.receita || "", c.nascimento || ""), c.nome, "Aniversário + Receita")} className="hover:scale-110 transition-transform p-1">
                               <WhatsAppIconBlue />
                             </button>
                           </div>
@@ -1005,7 +1005,7 @@ export default function CRM() {
                                 <p className="text-[10px] text-emerald-600 font-medium">🎂 Aniversariante de Hoje!</p>
                               </div>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento), c.nome, "Aniversário")} className="hover:scale-110 transition-transform p-1">
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome || "", c.nascimento || ""), c.nome, "Aniversário")} className="hover:scale-110 transition-transform p-1">
                               <WhatsAppIcon />
                             </button>
                           </div>
@@ -1022,7 +1022,7 @@ export default function CRM() {
                                 <p className="text-[10px] text-red-600 font-medium">🚨 Receita Vence Hoje!</p>
                               </div>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita), c.nome, "Receita")} className="hover:scale-110 transition-transform p-1">
+                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome || "", c.receita || ""), c.nome, "Receita")} className="hover:scale-110 transition-transform p-1">
                               <WhatsAppIconRed />
                             </button>
                           </div>
@@ -1183,11 +1183,11 @@ export default function CRM() {
                         {/* LINHA 1: WA link + histórico + observações */}
                         <div className="flex gap-0.5 items-center">
                           {(anivMes && statusRecText) ? (
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento), c.nome, "Aniversário + Receita")} className="p-1 hover:scale-110 transition-transform" title="Mensagem combinada"><WhatsAppIconBlue /></button>
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome || "", c.receita || "", c.nascimento || ""), c.nome, "Aniversário + Receita")} className="p-1 hover:scale-110 transition-transform" title="Mensagem combinada"><WhatsAppIconBlue /></button>
                           ) : (
                             <>
-                              {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento), c.nome, "Aniversário")} className="p-1 hover:scale-110 transition-transform" title="Aniversário"><WhatsAppIcon /></button>}
-                              {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita), c.nome, "Receita")} className="p-1 hover:scale-110 transition-transform" title="Receita"><WhatsAppIconRed /></button>}
+                              {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome || "", c.nascimento || ""), c.nome, "Aniversário")} className="p-1 hover:scale-110 transition-transform" title="Aniversário"><WhatsAppIcon /></button>}
+                              {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome || "", c.receita || ""), c.nome, "Receita")} className="p-1 hover:scale-110 transition-transform" title="Receita"><WhatsAppIconRed /></button>}
                             </>
                           )}
                           <button onClick={() => abrirHistorico(c.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition-colors" title="Histórico">
@@ -1308,7 +1308,7 @@ export default function CRM() {
                               {diaSelecionado === diaHoje && <input type="checkbox" checked={status.aniversarioNoDia} onChange={() => marcarEnviado(c.id, "aniversarioNoDia")} className="rounded text-emerald-600 w-3 h-3 cursor-pointer" />}
                               <span className={`text-xs font-bold text-slate-700 ${diaSelecionado === diaHoje && status.aniversarioNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</span>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform">
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome || "", c.nascimento || ""))} className="hover:scale-110 transition-transform">
                               <WhatsAppIcon />
                             </button>
                           </div>
@@ -1325,7 +1325,7 @@ export default function CRM() {
                               {diaSelecionado === diaHoje && <input type="checkbox" checked={status.receitaNoDia} onChange={() => marcarEnviado(c.id, "receitaNoDia")} className="rounded text-red-600 w-3 h-3 cursor-pointer" />}
                               <span className={`text-xs font-bold text-slate-700 ${diaSelecionado === diaHoje && status.receitaNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</span>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform">
+                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome || "", c.receita || ""))} className="hover:scale-110 transition-transform">
                               <WhatsAppIconRed />
                             </button>
                           </div>
