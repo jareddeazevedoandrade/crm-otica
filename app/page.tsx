@@ -157,11 +157,34 @@ export default function CRM() {
       setClientes(todosClientes);
 
       // 2. Carregar Status das Checkboxes (Persistência)
-      const { data: statusData, error: statusError } = await supabase.from("cliente_status_envio").select("*, data_marcacao");
-      if (statusError) {
-        console.error("Erro ao buscar status de envio:", statusError.message);
-        return;
-      }
+let todosStatus: any[] = [];
+let dePage = 0;
+let toPage = 999;
+let continuaStatus = true;
+
+while (continuaStatus) {
+  const { data, error } = await supabase
+    .from("cliente_status_envio")
+    .select("cliente_id, tipo_envio, status, data_marcacao")
+    .eq("status", true)
+    .range(dePage, toPage);
+
+  if (error) {
+    console.error("Erro ao buscar status:", error.message);
+    continuaStatus = false;
+    break;
+  }
+
+  if (data && data.length > 0) {
+    todosStatus = [...todosStatus, ...data];
+    if (data.length < 1000) continuaStatus = false;
+    else { dePage += 1000; toPage += 1000; }
+  } else {
+    continuaStatus = false;
+  }
+}
+
+const statusData = todosStatus;
 
       if (statusData) {
         const novoStatusEnvio: Record<number, { aniversarioNoDia: boolean; receitaNoDia: boolean; data_marcacao?: string }> = {};
@@ -171,18 +194,23 @@ export default function CRM() {
           const cid = item.cliente_id;
           if (item.tipo_envio === "aniversarioNoDia" || item.tipo_envio === "receitaNoDia") {
             if (!novoStatusEnvio[cid]) novoStatusEnvio[cid] = { aniversarioNoDia: false, receitaNoDia: false };
-            novoStatusEnvio[cid][item.tipo_envio as "aniversarioNoDia" | "receitaNoDia"] = item.status;
+            novoStatusEnvio[cid][item.tipo_envio as "aniversarioNoDia" | "receitaNoDia"] = item.status === true;
             if (item.data_marcacao) novoStatusEnvio[cid].data_marcacao = item.data_marcacao;
           } else if (item.tipo_envio === "aniversarioMes" || item.tipo_envio === "receitaAntecipada") {
             if (!novoStatusIndependente[cid]) novoStatusIndependente[cid] = { aniversarioMes: false, receitaAntecipada: false };
-            novoStatusIndependente[cid][item.tipo_envio as "aniversarioMes" | "receitaAntecipada"] = item.status;
+            novoStatusIndependente[cid][item.tipo_envio as "aniversarioMes" | "receitaAntecipada"] = item.status === true;
             if (item.data_marcacao) novoStatusIndependente[cid].data_marcacao = item.data_marcacao;
           }
         });
 
-        setStatusEnvio(novoStatusEnvio);
-        setStatusEnvioIndependente(novoStatusIndependente);
-      }
+    // ADICIONE AQUI:
+    console.log("📦 statusData bruto do banco:", statusData);
+    console.log("✅ novoStatusEnvio processado:", novoStatusEnvio);
+    console.log("✅ novoStatusIndependente processado:", novoStatusIndependente);
+
+    setStatusEnvio(novoStatusEnvio);
+    setStatusEnvioIndependente(novoStatusIndependente);
+  }
 
       // 3. Carregar respostas do histórico (última por cliente, ordenada por data)
       const { data: respostasData, error: respostasError } = await supabase
@@ -550,18 +578,28 @@ export default function CRM() {
 
   // FUNÇÃO PARA PERSISTIR NO SUPABASE
   const atualizarStatusNoSupabase = async (clienteId: number, tipoEnvio: string, novoStatus: boolean) => {
-    await supabase
-      .from('cliente_status_envio')
-      .upsert(
-        { 
-          cliente_id: clienteId, 
-          tipo_envio: tipoEnvio, 
-          status: novoStatus, 
-          data_marcacao: novoStatus ? new Date().toISOString().slice(0, 10) : null 
-        },
-        { onConflict: 'cliente_id, tipo_envio' }
-      );
-  };
+  console.log("🔄 Tentando salvar:", { clienteId, tipoEnvio, novoStatus });
+  
+  const { data, error } = await supabase
+    .from('cliente_status_envio')
+    .upsert(
+      { 
+        cliente_id: clienteId, 
+        tipo_envio: tipoEnvio, 
+        status: novoStatus, 
+        data_marcacao: novoStatus ? new Date().toISOString().slice(0, 10) : null 
+      },
+      { onConflict: 'cliente_id, tipo_envio' }
+    )
+    .select();
+  
+  if (error) {
+    console.error("❌ Erro ao salvar:", error);
+    alert("Erro: " + error.message + " | Código: " + error.code);
+  } else {
+    console.log("✅ Salvo com sucesso:", data);
+  }
+};
 
   const marcarEnviado = (id: number, tipo: "aniversarioNoDia" | "receitaNoDia") => {
     setStatusEnvio((prev) => {
