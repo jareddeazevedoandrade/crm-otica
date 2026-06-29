@@ -651,6 +651,12 @@ const statusData = todosStatus;
       const temMensal = ind && (ind.aniversarioMes || ind.receitaAntecipada);
       return !!(temHoje || temMensal);
     });
+    if (filtro === "nao_contatados") f = f.filter((c) => {
+  const env = statusEnvio[c.id];
+  const ind = statusEnvioIndependente[c.id];
+  return !((env && (env.aniversarioNoDia || env.receitaNoDia)) || (ind && (ind.aniversarioMes || ind.receitaAntecipada)));
+});
+if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interessado");
     if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interessado");
 
     if (pesquisa) {
@@ -801,7 +807,12 @@ const statusData = todosStatus;
       receita_hoje:      clientes.filter(c => isReceitaHoje(c.receita)).length,
       receitas_vencidas: clientes.filter(c => isReceitaVencidaTotal(c.receita)).length,
       contatados:        contatadosIds.size,
-      interessados:      Object.values(respostas).filter(r => r === "interessado").length,
+nao_contatados:    clientes.filter(c => {
+  const env = statusEnvio[c.id];
+  const ind = statusEnvioIndependente[c.id];
+  return !((env && (env.aniversarioNoDia || env.receitaNoDia)) || (ind && (ind.aniversarioMes || ind.receitaAntecipada)));
+}).length,
+interessados:      Object.values(respostas).filter(r => r === "interessado").length,
     };
   }, [clientes, statusEnvio, statusEnvioIndependente, respostas]);
 
@@ -1087,13 +1098,21 @@ const statusData = todosStatus;
                     className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg pl-4 pr-10 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
                     <option value="todos">Todos os Clientes ({filtroContagens.todos})</option>
-                    <option value="aniv_mes">Aniv. do Mês ({filtroContagens.aniv_mes})</option>
-                    <option value="aniv_hoje">Aniv. HOJE! ({filtroContagens.aniv_hoje})</option>
-                    <option value="receitas_vencer">Receitas para vencer ({filtroContagens.receitas_vencer})</option>
-                    <option value="receita_hoje">Receita hoje ({filtroContagens.receita_hoje})</option>
-                    <option value="receitas_vencidas">Receitas Vencidas ({filtroContagens.receitas_vencidas})</option>
-                    <option value="contatados">✅ Já Contatados ({filtroContagens.contatados})</option>
-                    <option value="interessados">👍 Interessados ({filtroContagens.interessados})</option>
+
+<option disabled>─────────────────────</option>
+<option value="aniv_mes">Aniv. do Mês ({filtroContagens.aniv_mes})</option>
+<option value="aniv_hoje">Aniv. HOJE! ({filtroContagens.aniv_hoje})</option>
+
+<option disabled>─────────────────────</option>
+<option value="receitas_vencer">Receitas para vencer ({filtroContagens.receitas_vencer})</option>
+<option value="receita_hoje">Receita hoje ({filtroContagens.receita_hoje})</option>
+<option value="receitas_vencidas">Receitas Vencidas ({filtroContagens.receitas_vencidas})</option>
+
+<option disabled>─────────────────────</option>
+<option value="contatados">✅ Já Contatados ({filtroContagens.contatados})</option>
+<option value="nao_contatados">☐ Não Contatados ({filtroContagens.nao_contatados})</option>
+<option value="interessados">👍 Interessados ({filtroContagens.interessados})</option>
+                
                   </select>
                   <svg className="pointer-events-none absolute right-3 top-2.5 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
