@@ -14,6 +14,8 @@ type Lembrete = {
   concluido: boolean;
 };
 
+const ORIGENS = ["Instagram/Facebook", "Google/Maps", "Indicação", "Outros"] as const;
+
 type Cliente = {
   id: number;
   nome: string;
@@ -21,6 +23,7 @@ type Cliente = {
   receita: string | null;
   telefone: string;
   observacoes: string | null;
+  origem: string | null;
 };
 
 export default function CRM() {
@@ -37,6 +40,7 @@ export default function CRM() {
   const [receita, setReceita] = useState("");
   const [telefone, setTelefone] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  const [origem, setOrigem] = useState("");
 
   // Notificação de boas-vindas
   const [notificacao, setNotificacao] = useState<{ aniversariantes: number; receitasSemana: number } | null>(null);
@@ -74,6 +78,9 @@ export default function CRM() {
   // Modal histórico diário de "Contatados Hoje"
   const [modalHistoricoHoje, setModalHistoricoHoje] = useState(false);
   const [historicoHojeData, setHistoricoHojeData] = useState<{ data_marcacao: string; total: number }[]>([]);
+
+  // Modal breakdown de "Clientes Novos" (origem)
+  const [modalOrigem, setModalOrigem] = useState(false);
 
   // Toast de confirmação WhatsApp
   const [toast, setToast] = useState<{ nome: string; tipo: string } | null>(null);
@@ -257,7 +264,7 @@ const statusData = todosStatus;
   };
 
   const limpar = () => {
-    setNome(""); setNascimento(""); setReceita(""); setTelefone(""); setObservacoes(""); setEditandoId(null);
+    setNome(""); setNascimento(""); setReceita(""); setTelefone(""); setObservacoes(""); setOrigem(""); setEditandoId(null);
   };
 
   const editar = (c: Cliente) => {
@@ -267,6 +274,7 @@ const statusData = todosStatus;
     setReceita(c.receita || "");
     setTelefone(c.telefone);
     setObservacoes(c.observacoes || "");
+    setOrigem(c.origem || "");
   };
 
   const salvar = async () => {
@@ -277,6 +285,7 @@ const statusData = todosStatus;
       receita: receita || null,
       telefone,
       observacoes: observacoes || null,
+      origem: origem || null,
     };
     if (editandoId) {
       const { error } = await supabase.from("clientes").update(payload).eq("id", editandoId);
@@ -658,6 +667,10 @@ const statusData = todosStatus;
 });
 if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interessado");
     if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interessado");
+    if (filtro.startsWith("origem_")) {
+      const origemAlvo = filtro.replace("origem_", "");
+      f = f.filter((c) => c.origem === origemAlvo);
+    }
 
     if (pesquisa) {
       const p = pesquisa.toLowerCase();
@@ -790,6 +803,22 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
     return Object.values(respostas).filter(r => r === "interessado").length;
   }, [respostas]);
 
+  // CLIENTES NOVOS (origem preenchida) + BREAKDOWN POR ORIGEM
+  const clientesNovosCount = useMemo(() => {
+    return clientes.filter(c => !!c.origem).length;
+  }, [clientes]);
+
+  const origemBreakdown = useMemo(() => {
+    const contagem: Record<string, number> = {};
+    ORIGENS.forEach(o => { contagem[o] = 0; });
+    clientes.forEach(c => {
+      if (c.origem && contagem[c.origem] !== undefined) {
+        contagem[c.origem] += 1;
+      }
+    });
+    return contagem;
+  }, [clientes]);
+
   // CONTADORES POR FILTRO
   const filtroContagens = useMemo(() => {
     const contatadosIds = new Set<number>();
@@ -903,7 +932,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
           {abaAtiva === "dashboard" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* CARDS DE RESUMO */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
                   <div className="w-11 h-11 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-lg shrink-0">👥</div>
                   <div>
@@ -947,6 +976,14 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                     <p className="text-2xl font-black text-slate-900">{interessadosHojeCount}</p>
                   </div>
                 </div>
+                <button onClick={() => setModalOrigem(true)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 hover:border-violet-300 hover:shadow-md transition-all text-left w-full">
+                  <div className="w-11 h-11 bg-violet-50 rounded-full flex items-center justify-center text-violet-600 text-lg shrink-0">✨</div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Clientes Novos</p>
+                    <p className="text-2xl font-black text-slate-900">{clientesNovosCount}</p>
+                    <p className="text-[10px] text-violet-500 font-semibold mt-0.5">Ver por origem →</p>
+                  </div>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -975,6 +1012,15 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Data da Receita <span className="text-slate-300 normal-case font-normal">(opcional)</span></label>
                         <input value={receita} onChange={(e) => setReceita(formatarData(e.target.value))} placeholder="dd/mm/aaaa" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all" />
                       </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Cliente Novo — Como conheceu? <span className="text-slate-300 normal-case font-normal">(opcional)</span></label>
+                      <select value={origem} onChange={(e) => setOrigem(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all">
+                        <option value="">Selecione...</option>
+                        {ORIGENS.map((o) => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400 uppercase">Observações <span className="text-slate-300 normal-case font-normal">(opcional)</span></label>
@@ -1112,6 +1158,11 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
 <option value="contatados">✅ Já Contatados ({filtroContagens.contatados})</option>
 <option value="nao_contatados">☐ Não Contatados ({filtroContagens.nao_contatados})</option>
 <option value="interessados">👍 Interessados ({filtroContagens.interessados})</option>
+
+<option disabled>─────────────────────</option>
+{ORIGENS.map((o) => (
+  <option key={o} value={`origem_${o}`}>✨ {o} ({origemBreakdown[o]})</option>
+))}
                 
                   </select>
                   <svg className="pointer-events-none absolute right-3 top-2.5 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -1197,6 +1248,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                         <div className="flex flex-wrap gap-1 mt-0.5">
                           {followUpDias && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 border border-amber-300 text-amber-700 text-[9px] font-bold rounded-full">⏰ {followUpDias}d</span>}
                           {lembretes.filter(l => l.cliente_id === c.id).length > 0 && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-violet-100 border border-violet-200 text-violet-700 text-[9px] font-bold rounded-full">🔔 {lembretes.filter(l => l.cliente_id === c.id).length}</span>}
+                          {c.origem && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-violet-50 border border-violet-100 text-violet-600 text-[9px] font-bold rounded-full">✨ {c.origem}</span>}
                         </div>
                         {c.observacoes && <p className="text-[10px] text-slate-400 mt-0.5 italic truncate" title={c.observacoes}>📝 {c.observacoes}</p>}
                       </div>
@@ -1555,6 +1607,33 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL BREAKDOWN CLIENTES NOVOS (ORIGEM) */}
+      {modalOrigem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setModalOrigem(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-violet-500 rounded-full"></span>
+                Clientes Novos por Origem
+              </h3>
+              <button onClick={() => setModalOrigem(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+            <div className="space-y-2">
+              {ORIGENS.map((o) => (
+                <div key={o} className="flex items-center justify-between px-4 py-3 bg-violet-50 rounded-lg border border-violet-100">
+                  <span className="text-xs text-violet-800 font-semibold">{o}</span>
+                  <span className="text-sm font-black text-violet-700">{origemBreakdown[o]}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-lg border border-slate-100 mt-3">
+                <span className="text-xs text-slate-600 font-bold uppercase">Total</span>
+                <span className="text-sm font-black text-slate-800">{clientesNovosCount}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
