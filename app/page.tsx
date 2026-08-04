@@ -14,8 +14,6 @@ type Lembrete = {
   concluido: boolean;
 };
 
-const ORIGENS = ["Instagram/Facebook", "Google/Maps", "Indicação", "Outros"] as const;
-
 type Cliente = {
   id: number;
   nome: string;
@@ -23,7 +21,6 @@ type Cliente = {
   receita: string | null;
   telefone: string;
   observacoes: string | null;
-  origem: string | null;
 };
 
 export default function CRM() {
@@ -40,7 +37,6 @@ export default function CRM() {
   const [receita, setReceita] = useState("");
   const [telefone, setTelefone] = useState("");
   const [observacoes, setObservacoes] = useState("");
-  const [origem, setOrigem] = useState("");
 
   // Notificação de boas-vindas
   const [notificacao, setNotificacao] = useState<{ aniversariantes: number; receitasSemana: number } | null>(null);
@@ -78,9 +74,6 @@ export default function CRM() {
   // Modal histórico diário de "Contatados Hoje"
   const [modalHistoricoHoje, setModalHistoricoHoje] = useState(false);
   const [historicoHojeData, setHistoricoHojeData] = useState<{ data_marcacao: string; total: number }[]>([]);
-
-  // Modal breakdown de "Clientes Novos" (origem)
-  const [modalOrigem, setModalOrigem] = useState(false);
 
   // Toast de confirmação WhatsApp
   const [toast, setToast] = useState<{ nome: string; tipo: string } | null>(null);
@@ -121,7 +114,7 @@ export default function CRM() {
     };
 
     init();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
     return () => subscription.unsubscribe();
@@ -164,34 +157,11 @@ export default function CRM() {
       setClientes(todosClientes);
 
       // 2. Carregar Status das Checkboxes (Persistência)
-let todosStatus: any[] = [];
-let dePage = 0;
-let toPage = 999;
-let continuaStatus = true;
-
-while (continuaStatus) {
-  const { data, error } = await supabase
-    .from("cliente_status_envio")
-    .select("cliente_id, tipo_envio, status, data_marcacao")
-    .eq("status", true)
-    .range(dePage, toPage);
-
-  if (error) {
-    console.error("Erro ao buscar status:", error.message);
-    continuaStatus = false;
-    break;
-  }
-
-  if (data && data.length > 0) {
-    todosStatus = [...todosStatus, ...data];
-    if (data.length < 1000) continuaStatus = false;
-    else { dePage += 1000; toPage += 1000; }
-  } else {
-    continuaStatus = false;
-  }
-}
-
-const statusData = todosStatus;
+      const { data: statusData, error: statusError } = await supabase.from("cliente_status_envio").select("*, data_marcacao");
+      if (statusError) {
+        console.error("Erro ao buscar status de envio:", statusError.message);
+        return;
+      }
 
       if (statusData) {
         const novoStatusEnvio: Record<number, { aniversarioNoDia: boolean; receitaNoDia: boolean; data_marcacao?: string }> = {};
@@ -201,23 +171,18 @@ const statusData = todosStatus;
           const cid = item.cliente_id;
           if (item.tipo_envio === "aniversarioNoDia" || item.tipo_envio === "receitaNoDia") {
             if (!novoStatusEnvio[cid]) novoStatusEnvio[cid] = { aniversarioNoDia: false, receitaNoDia: false };
-            novoStatusEnvio[cid][item.tipo_envio as "aniversarioNoDia" | "receitaNoDia"] = item.status === true;
+            novoStatusEnvio[cid][item.tipo_envio as "aniversarioNoDia" | "receitaNoDia"] = item.status;
             if (item.data_marcacao) novoStatusEnvio[cid].data_marcacao = item.data_marcacao;
           } else if (item.tipo_envio === "aniversarioMes" || item.tipo_envio === "receitaAntecipada") {
             if (!novoStatusIndependente[cid]) novoStatusIndependente[cid] = { aniversarioMes: false, receitaAntecipada: false };
-            novoStatusIndependente[cid][item.tipo_envio as "aniversarioMes" | "receitaAntecipada"] = item.status === true;
+            novoStatusIndependente[cid][item.tipo_envio as "aniversarioMes" | "receitaAntecipada"] = item.status;
             if (item.data_marcacao) novoStatusIndependente[cid].data_marcacao = item.data_marcacao;
           }
         });
 
-    // ADICIONE AQUI:
-    console.log("📦 statusData bruto do banco:", statusData);
-    console.log("✅ novoStatusEnvio processado:", novoStatusEnvio);
-    console.log("✅ novoStatusIndependente processado:", novoStatusIndependente);
-
-    setStatusEnvio(novoStatusEnvio);
-    setStatusEnvioIndependente(novoStatusIndependente);
-  }
+        setStatusEnvio(novoStatusEnvio);
+        setStatusEnvioIndependente(novoStatusIndependente);
+      }
 
       // 3. Carregar respostas do histórico (última por cliente, ordenada por data)
       const { data: respostasData, error: respostasError } = await supabase
@@ -264,7 +229,7 @@ const statusData = todosStatus;
   };
 
   const limpar = () => {
-    setNome(""); setNascimento(""); setReceita(""); setTelefone(""); setObservacoes(""); setOrigem(""); setEditandoId(null);
+    setNome(""); setNascimento(""); setReceita(""); setTelefone(""); setObservacoes(""); setEditandoId(null);
   };
 
   const editar = (c: Cliente) => {
@@ -274,7 +239,6 @@ const statusData = todosStatus;
     setReceita(c.receita || "");
     setTelefone(c.telefone);
     setObservacoes(c.observacoes || "");
-    setOrigem(c.origem || "");
   };
 
   const salvar = async () => {
@@ -285,7 +249,6 @@ const statusData = todosStatus;
       receita: receita || null,
       telefone,
       observacoes: observacoes || null,
-      origem: origem || null,
     };
     if (editandoId) {
       const { error } = await supabase.from("clientes").update(payload).eq("id", editandoId);
@@ -587,28 +550,18 @@ const statusData = todosStatus;
 
   // FUNÇÃO PARA PERSISTIR NO SUPABASE
   const atualizarStatusNoSupabase = async (clienteId: number, tipoEnvio: string, novoStatus: boolean) => {
-  console.log("🔄 Tentando salvar:", { clienteId, tipoEnvio, novoStatus });
-  
-  const { data, error } = await supabase
-    .from('cliente_status_envio')
-    .upsert(
-      { 
-        cliente_id: clienteId, 
-        tipo_envio: tipoEnvio, 
-        status: novoStatus, 
-        data_marcacao: novoStatus ? new Date().toISOString().slice(0, 10) : null 
-      },
-      { onConflict: 'cliente_id, tipo_envio' }
-    )
-    .select();
-  
-  if (error) {
-    console.error("❌ Erro ao salvar:", error);
-    alert("Erro: " + error.message + " | Código: " + error.code);
-  } else {
-    console.log("✅ Salvo com sucesso:", data);
-  }
-};
+    await supabase
+      .from('cliente_status_envio')
+      .upsert(
+        { 
+          cliente_id: clienteId, 
+          tipo_envio: tipoEnvio, 
+          status: novoStatus, 
+          data_marcacao: novoStatus ? new Date().toISOString().slice(0, 10) : null 
+        },
+        { onConflict: 'cliente_id, tipo_envio' }
+      );
+  };
 
   const marcarEnviado = (id: number, tipo: "aniversarioNoDia" | "receitaNoDia") => {
     setStatusEnvio((prev) => {
@@ -660,17 +613,7 @@ const statusData = todosStatus;
       const temMensal = ind && (ind.aniversarioMes || ind.receitaAntecipada);
       return !!(temHoje || temMensal);
     });
-    if (filtro === "nao_contatados") f = f.filter((c) => {
-  const env = statusEnvio[c.id];
-  const ind = statusEnvioIndependente[c.id];
-  return !((env && (env.aniversarioNoDia || env.receitaNoDia)) || (ind && (ind.aniversarioMes || ind.receitaAntecipada)));
-});
-if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interessado");
     if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interessado");
-    if (filtro.startsWith("origem_")) {
-      const origemAlvo = filtro.replace("origem_", "");
-      f = f.filter((c) => c.origem === origemAlvo);
-    }
 
     if (pesquisa) {
       const p = pesquisa.toLowerCase();
@@ -685,8 +628,8 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
     return [...f].sort((a, b) => {
       // Filtros de aniversário: ordenar por dia do mês
       if (filtro === "aniv_mes" || filtro === "aniv_hoje") {
-        const dA = parseData(a.nascimento || "");
-        const dB = parseData(b.nascimento || "");
+        const dA = parseData(a.nascimento);
+        const dB = parseData(b.nascimento);
         const diaA = dA ? dA.dia : 99;
         const diaB = dB ? dB.dia : 99;
         if (diaA !== diaB) return sortOrder === 'asc' ? diaA - diaB : diaB - diaA;
@@ -695,10 +638,10 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
 
       // Filtros de receita: ordenar por prioridade de status
       if (filtro === "receitas_vencer" || filtro === "receita_hoje" || filtro === "receitas_vencidas") {
-        const statusA = getStatusReceita(a.receita || "") || "";
-        const statusB = getStatusReceita(b.receita || "") || "";
-        const diasA = diasPassadosReceita(a.receita || "") ?? 0;
-        const diasB = diasPassadosReceita(b.receita || "") ?? 0;
+        const statusA = getStatusReceita(a.receita) || "";
+        const statusB = getStatusReceita(b.receita) || "";
+        const diasA = diasPassadosReceita(a.receita) ?? 0;
+        const diasB = diasPassadosReceita(b.receita) ?? 0;
 
         const priority = (s: string) => {
           if (s === "VENCE HOJE!") return 1;
@@ -803,22 +746,6 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
     return Object.values(respostas).filter(r => r === "interessado").length;
   }, [respostas]);
 
-  // CLIENTES NOVOS (origem preenchida) + BREAKDOWN POR ORIGEM
-  const clientesNovosCount = useMemo(() => {
-    return clientes.filter(c => !!c.origem).length;
-  }, [clientes]);
-
-  const origemBreakdown = useMemo(() => {
-    const contagem: Record<string, number> = {};
-    ORIGENS.forEach(o => { contagem[o] = 0; });
-    clientes.forEach(c => {
-      if (c.origem && contagem[c.origem] !== undefined) {
-        contagem[c.origem] += 1;
-      }
-    });
-    return contagem;
-  }, [clientes]);
-
   // CONTADORES POR FILTRO
   const filtroContagens = useMemo(() => {
     const contatadosIds = new Set<number>();
@@ -836,12 +763,7 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
       receita_hoje:      clientes.filter(c => isReceitaHoje(c.receita)).length,
       receitas_vencidas: clientes.filter(c => isReceitaVencidaTotal(c.receita)).length,
       contatados:        contatadosIds.size,
-nao_contatados:    clientes.filter(c => {
-  const env = statusEnvio[c.id];
-  const ind = statusEnvioIndependente[c.id];
-  return !((env && (env.aniversarioNoDia || env.receitaNoDia)) || (ind && (ind.aniversarioMes || ind.receitaAntecipada)));
-}).length,
-interessados:      Object.values(respostas).filter(r => r === "interessado").length,
+      interessados:      Object.values(respostas).filter(r => r === "interessado").length,
     };
   }, [clientes, statusEnvio, statusEnvioIndependente, respostas]);
 
@@ -932,7 +854,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
           {abaAtiva === "dashboard" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* CARDS DE RESUMO */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
                   <div className="w-11 h-11 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-lg shrink-0">👥</div>
                   <div>
@@ -976,14 +898,6 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                     <p className="text-2xl font-black text-slate-900">{interessadosHojeCount}</p>
                   </div>
                 </div>
-                <button onClick={() => setModalOrigem(true)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 hover:border-violet-300 hover:shadow-md transition-all text-left w-full">
-                  <div className="w-11 h-11 bg-violet-50 rounded-full flex items-center justify-center text-violet-600 text-lg shrink-0">✨</div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Clientes Novos</p>
-                    <p className="text-2xl font-black text-slate-900">{clientesNovosCount}</p>
-                    <p className="text-[10px] text-violet-500 font-semibold mt-0.5">Ver por origem →</p>
-                  </div>
-                </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1012,15 +926,6 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Data da Receita <span className="text-slate-300 normal-case font-normal">(opcional)</span></label>
                         <input value={receita} onChange={(e) => setReceita(formatarData(e.target.value))} placeholder="dd/mm/aaaa" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all" />
                       </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Cliente Novo — Como conheceu? <span className="text-slate-300 normal-case font-normal">(opcional)</span></label>
-                      <select value={origem} onChange={(e) => setOrigem(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all">
-                        <option value="">Selecione...</option>
-                        {ORIGENS.map((o) => (
-                          <option key={o} value={o}>{o}</option>
-                        ))}
-                      </select>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400 uppercase">Observações <span className="text-slate-300 normal-case font-normal">(opcional)</span></label>
@@ -1083,7 +988,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                                 <p className="text-[10px] text-blue-600 font-medium">🎉 Aniversário + Receita Vencida!</p>
                               </div>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome || "", c.receita || "", c.nascimento || ""), c.nome, "Aniversário + Receita")} className="hover:scale-110 transition-transform p-1">
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento), c.nome, "Aniversário + Receita")} className="hover:scale-110 transition-transform p-1">
                               <WhatsAppIconBlue />
                             </button>
                           </div>
@@ -1100,7 +1005,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                                 <p className="text-[10px] text-emerald-600 font-medium">🎂 Aniversariante de Hoje!</p>
                               </div>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome || "", c.nascimento || ""), c.nome, "Aniversário")} className="hover:scale-110 transition-transform p-1">
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento), c.nome, "Aniversário")} className="hover:scale-110 transition-transform p-1">
                               <WhatsAppIcon />
                             </button>
                           </div>
@@ -1117,7 +1022,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                                 <p className="text-[10px] text-red-600 font-medium">🚨 Receita Vence Hoje!</p>
                               </div>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome || "", c.receita || ""), c.nome, "Receita")} className="hover:scale-110 transition-transform p-1">
+                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita), c.nome, "Receita")} className="hover:scale-110 transition-transform p-1">
                               <WhatsAppIconRed />
                             </button>
                           </div>
@@ -1144,26 +1049,13 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                     className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg pl-4 pr-10 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
                     <option value="todos">Todos os Clientes ({filtroContagens.todos})</option>
-
-<option disabled>─────────────────────</option>
-<option value="aniv_mes">Aniv. do Mês ({filtroContagens.aniv_mes})</option>
-<option value="aniv_hoje">Aniv. HOJE! ({filtroContagens.aniv_hoje})</option>
-
-<option disabled>─────────────────────</option>
-<option value="receitas_vencer">Receitas para vencer ({filtroContagens.receitas_vencer})</option>
-<option value="receita_hoje">Receita hoje ({filtroContagens.receita_hoje})</option>
-<option value="receitas_vencidas">Receitas Vencidas ({filtroContagens.receitas_vencidas})</option>
-
-<option disabled>─────────────────────</option>
-<option value="contatados">✅ Já Contatados ({filtroContagens.contatados})</option>
-<option value="nao_contatados">☐ Não Contatados ({filtroContagens.nao_contatados})</option>
-<option value="interessados">👍 Interessados ({filtroContagens.interessados})</option>
-
-<option disabled>─────────────────────</option>
-{ORIGENS.map((o) => (
-  <option key={o} value={`origem_${o}`}>✨ {o} ({origemBreakdown[o]})</option>
-))}
-                
+                    <option value="aniv_mes">Aniv. do Mês ({filtroContagens.aniv_mes})</option>
+                    <option value="aniv_hoje">Aniv. HOJE! ({filtroContagens.aniv_hoje})</option>
+                    <option value="receitas_vencer">Receitas para vencer ({filtroContagens.receitas_vencer})</option>
+                    <option value="receita_hoje">Receita hoje ({filtroContagens.receita_hoje})</option>
+                    <option value="receitas_vencidas">Receitas Vencidas ({filtroContagens.receitas_vencidas})</option>
+                    <option value="contatados">✅ Já Contatados ({filtroContagens.contatados})</option>
+                    <option value="interessados">👍 Interessados ({filtroContagens.interessados})</option>
                   </select>
                   <svg className="pointer-events-none absolute right-3 top-2.5 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
@@ -1248,7 +1140,6 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                         <div className="flex flex-wrap gap-1 mt-0.5">
                           {followUpDias && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 border border-amber-300 text-amber-700 text-[9px] font-bold rounded-full">⏰ {followUpDias}d</span>}
                           {lembretes.filter(l => l.cliente_id === c.id).length > 0 && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-violet-100 border border-violet-200 text-violet-700 text-[9px] font-bold rounded-full">🔔 {lembretes.filter(l => l.cliente_id === c.id).length}</span>}
-                          {c.origem && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-violet-50 border border-violet-100 text-violet-600 text-[9px] font-bold rounded-full">✨ {c.origem}</span>}
                         </div>
                         {c.observacoes && <p className="text-[10px] text-slate-400 mt-0.5 italic truncate" title={c.observacoes}>📝 {c.observacoes}</p>}
                       </div>
@@ -1292,11 +1183,11 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                         {/* LINHA 1: WA link + histórico + observações */}
                         <div className="flex gap-0.5 items-center">
                           {(anivMes && statusRecText) ? (
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome || "", c.receita || "", c.nascimento || ""), c.nome, "Aniversário + Receita")} className="p-1 hover:scale-110 transition-transform" title="Mensagem combinada"><WhatsAppIconBlue /></button>
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome, c.receita, c.nascimento), c.nome, "Aniversário + Receita")} className="p-1 hover:scale-110 transition-transform" title="Mensagem combinada"><WhatsAppIconBlue /></button>
                           ) : (
                             <>
-                              {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome || "", c.nascimento || ""), c.nome, "Aniversário")} className="p-1 hover:scale-110 transition-transform" title="Aniversário"><WhatsAppIcon /></button>}
-                              {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome || "", c.receita || ""), c.nome, "Receita")} className="p-1 hover:scale-110 transition-transform" title="Receita"><WhatsAppIconRed /></button>}
+                              {anivMes && <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento), c.nome, "Aniversário")} className="p-1 hover:scale-110 transition-transform" title="Aniversário"><WhatsAppIcon /></button>}
+                              {statusRecText && <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita), c.nome, "Receita")} className="p-1 hover:scale-110 transition-transform" title="Receita"><WhatsAppIconRed /></button>}
                             </>
                           )}
                           <button onClick={() => abrirHistorico(c.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition-colors" title="Histórico">
@@ -1386,8 +1277,8 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
 
               <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-xl overflow-hidden shadow-inner">
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((dia) => {
-                  const anivs = clientes.filter(c => { const d = c.nascimento ? parseData(c.nascimento) : null; return d ? d.dia === dia && d.mes === mesHoje : false; });
-                  const recs = clientes.filter(c => { const d = c.receita ? parseData(c.receita) : null; return d ? d.dia === dia && d.mes === mesHoje : false; });
+                  const anivs = clientes.filter(c => { const d = parseData(c.nascimento); return d ? d.dia === dia && d.mes === mesHoje : false; });
+                  const recs = clientes.filter(c => { const d = parseData(c.receita); return d ? d.dia === dia && d.mes === mesHoje : false; });
                   return (
                     <div key={dia} onClick={() => setDiaSelecionado(dia)} className={`bg-white min-h-[100px] p-3 cursor-pointer hover:bg-slate-50 transition-colors group relative ${dia === diaHoje ? "ring-2 ring-inset ring-indigo-500" : ""}`}>
                       <span className={`text-xs font-bold ${dia === diaHoje ? "text-indigo-600" : "text-slate-400"}`}>{dia}</span>
@@ -1409,7 +1300,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-3">
                       <p className="text-[10px] font-bold text-emerald-600 uppercase">Aniversariantes</p>
-                      {clientes.filter(c => { const d = c.nascimento ? parseData(c.nascimento) : null; return d ? d.dia === diaSelecionado && d.mes === mesHoje : false; }).map(c => {
+                      {clientes.filter(c => { const d = parseData(c.nascimento); return d ? d.dia === diaSelecionado && d.mes === mesHoje : false; }).map(c => {
                         const status = getStatus(c.id);
                         return (
                           <div key={c.id} className="bg-white p-3 rounded-lg shadow-sm border border-emerald-100 flex items-center justify-between">
@@ -1417,7 +1308,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                               {diaSelecionado === diaHoje && <input type="checkbox" checked={status.aniversarioNoDia} onChange={() => marcarEnviado(c.id, "aniversarioNoDia")} className="rounded text-emerald-600 w-3 h-3 cursor-pointer" />}
                               <span className={`text-xs font-bold text-slate-700 ${diaSelecionado === diaHoje && status.aniversarioNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</span>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome || "", c.nascimento || ""))} className="hover:scale-110 transition-transform">
+                            <button onClick={() => whatsapp(c.telefone, getMsgAniversario(c.nome, c.nascimento))} className="hover:scale-110 transition-transform">
                               <WhatsAppIcon />
                             </button>
                           </div>
@@ -1426,7 +1317,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                     </div>
                     <div className="space-y-3">
                       <p className="text-[10px] font-bold text-red-600 uppercase">Receitas</p>
-                      {clientes.filter(c => { const d = c.receita ? parseData(c.receita) : null; return d ? d.dia === diaSelecionado && d.mes === mesHoje : false; }).map(c => {
+                      {clientes.filter(c => { const d = parseData(c.receita); return d ? d.dia === diaSelecionado && d.mes === mesHoje : false; }).map(c => {
                         const status = getStatus(c.id);
                         return (
                           <div key={c.id} className="bg-white p-3 rounded-lg shadow-sm border border-red-100 flex items-center justify-between">
@@ -1434,7 +1325,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                               {diaSelecionado === diaHoje && <input type="checkbox" checked={status.receitaNoDia} onChange={() => marcarEnviado(c.id, "receitaNoDia")} className="rounded text-red-600 w-3 h-3 cursor-pointer" />}
                               <span className={`text-xs font-bold text-slate-700 ${diaSelecionado === diaHoje && status.receitaNoDia ? "line-through opacity-50" : ""}`}>{c.nome}</span>
                             </div>
-                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome || "", c.receita || ""))} className="hover:scale-110 transition-transform">
+                            <button onClick={() => whatsapp(c.telefone, getMsgReceita(c.nome, c.receita))} className="hover:scale-110 transition-transform">
                               <WhatsAppIconRed />
                             </button>
                           </div>
@@ -1607,33 +1498,6 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                 })}
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* MODAL BREAKDOWN CLIENTES NOVOS (ORIGEM) */}
-      {modalOrigem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setModalOrigem(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-violet-500 rounded-full"></span>
-                Clientes Novos por Origem
-              </h3>
-              <button onClick={() => setModalOrigem(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
-            </div>
-            <div className="space-y-2">
-              {ORIGENS.map((o) => (
-                <div key={o} className="flex items-center justify-between px-4 py-3 bg-violet-50 rounded-lg border border-violet-100">
-                  <span className="text-xs text-violet-800 font-semibold">{o}</span>
-                  <span className="text-sm font-black text-violet-700">{origemBreakdown[o]}</span>
-                </div>
-              ))}
-              <div className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-lg border border-slate-100 mt-3">
-                <span className="text-xs text-slate-600 font-bold uppercase">Total</span>
-                <span className="text-sm font-black text-slate-800">{clientesNovosCount}</span>
-              </div>
-            </div>
           </div>
         </div>
       )}
