@@ -580,40 +580,40 @@ const statusData = todosStatus;
   // ABRIR HISTÓRICO DIÁRIO DE CONTATADOS HOJE
   const abrirHistoricoHoje = async () => {
     setModalHistoricoHoje(true);
-    // Conta contatos por dia nos dois status tables
-    const { data: envioData } = await supabase
-      .from("cliente_status_envio")
-      .select("data_marcacao")
-      .eq("status", true)
-      .not("data_marcacao", "is", null);
-    if (envioData) {
-      const contagem: Record<string, Set<string>> = {};
-      envioData.forEach((r: any) => {
-        if (!contagem[r.data_marcacao]) contagem[r.data_marcacao] = new Set();
-        // We count per date (unique entries approximate unique clients)
-        contagem[r.data_marcacao].add(r.data_marcacao + Math.random());
-      });
-      // Better: group by date and count distinct cliente_id
-    }
-    // Proper query: get distinct cliente_id counts per day
+
+    // Busca contatos das duas tabelas: status_envio (aniversário/receita) e promo_receita (promoção)
     const { data: rawData } = await supabase
       .from("cliente_status_envio")
       .select("cliente_id, data_marcacao")
       .eq("status", true)
       .not("data_marcacao", "is", null)
       .order("data_marcacao", { ascending: false });
-    if (rawData) {
-      const porDia: Record<string, Set<number>> = {};
-      rawData.forEach((r: any) => {
-        if (!porDia[r.data_marcacao]) porDia[r.data_marcacao] = new Set();
-        porDia[r.data_marcacao].add(r.cliente_id);
-      });
-      const resultado = Object.entries(porDia)
-        .map(([data, ids]) => ({ data_marcacao: data, total: ids.size }))
-        .sort((a, b) => b.data_marcacao.localeCompare(a.data_marcacao))
-        .slice(0, 30);
-      setHistoricoHojeData(resultado);
-    }
+
+    const { data: promoData } = await supabase
+      .from("cliente_promo_receita")
+      .select("cliente_id, data_marcacao")
+      .eq("status", true)
+      .not("data_marcacao", "is", null)
+      .order("data_marcacao", { ascending: false });
+
+    const porDia: Record<string, Set<number>> = {};
+
+    (rawData || []).forEach((r: any) => {
+      if (!porDia[r.data_marcacao]) porDia[r.data_marcacao] = new Set();
+      porDia[r.data_marcacao].add(r.cliente_id);
+    });
+
+    (promoData || []).forEach((r: any) => {
+      if (!porDia[r.data_marcacao]) porDia[r.data_marcacao] = new Set();
+      porDia[r.data_marcacao].add(r.cliente_id);
+    });
+
+    const resultado = Object.entries(porDia)
+      .map(([data, ids]) => ({ data_marcacao: data, total: ids.size }))
+      .sort((a, b) => b.data_marcacao.localeCompare(a.data_marcacao))
+      .slice(0, 30);
+
+    setHistoricoHojeData(resultado);
   };
 
   // CRIAR LEMBRETE
@@ -931,8 +931,11 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
     Object.entries(statusEnvioIndependente).forEach(([id, status]) => {
       if (status.aniversarioMes || status.receitaAntecipada) idsContatados.add(id);
     });
+    Object.entries(statusPromo).forEach(([id, status]) => {
+      if (status.enviado) idsContatados.add(id);
+    });
     return idsContatados.size;
-  }, [statusEnvio, statusEnvioIndependente]);
+  }, [statusEnvio, statusEnvioIndependente, statusPromo]);
 
   // CORREÇÃO 2: Contatados hoje — usa data local (não UTC) para evitar bug de fuso horário
   const contatadosHojeCount = useMemo(() => {
@@ -954,8 +957,15 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
       }
     });
 
+    Object.entries(statusPromo).forEach(([id, status]) => {
+      const dm = status.data_marcacao?.slice(0,10);
+      if (status.enviado && dm === hojeLocal) {
+        idsContatados.add(id);
+      }
+    });
+
     return idsContatados.size;
-  }, [statusEnvio, statusEnvioIndependente]);
+  }, [statusEnvio, statusEnvioIndependente, statusPromo]);
 
   // INTERESSADOS HOJE
   const interessadosHojeCount = useMemo(() => {
