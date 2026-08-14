@@ -16,6 +16,87 @@ type Lembrete = {
 
 const ORIGENS = ["Instagram/Facebook", "Google/Maps", "Indicação", "Outros"] as const;
 
+// ===== SISTEMA DE MENSAGENS EDITÁVEIS (WhatsApp) =====
+// Cada mensagem pode ser editada na aba "Mensagens" (acesso restrito ao admin).
+// Use as variáveis entre chaves duplas, ex: {{NOME}}, elas são substituídas automaticamente.
+type MsgTemplateDef = {
+  id: string;
+  label: string;
+  descricao: string;
+  placeholders: { tag: string; explicacao: string }[];
+  padrao: string;
+};
+
+const TEMPLATES_DEFINICAO: MsgTemplateDef[] = [
+  {
+    id: "aniversario_hoje",
+    label: "Aniversário — no dia",
+    descricao: "Enviada quando o cliente faz aniversário HOJE.",
+    placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente (maiúsculo)" }],
+    padrao: `🎉 *{{NOME}}, ANIVERSARIANTE DO DIA TEM PRESENTE!* 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 *25% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO25\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`,
+  },
+  {
+    id: "aniversario_mes",
+    label: "Aniversário — no mês",
+    descricao: "Enviada quando o cliente faz aniversário no mês, mas não hoje.",
+    placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente (maiúsculo)" }],
+    padrao: `🎉 *{{NOME}}, ANIVERSARIANTE DO MÊS TEM PRESENTE!* 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 *20% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO20\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`,
+  },
+  {
+    id: "receita_hoje",
+    label: "Receita — vence hoje",
+    descricao: "Enviada quando a receita do cliente vence exatamente hoje.",
+    placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente" }],
+    padrao: `🚨 {{NOME}}, SUA RECEITA VENCEU *HOJE*! 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`,
+  },
+  {
+    id: "receita_vencida_longa",
+    label: "Receita — vencida há mais de 3 anos",
+    descricao: "Enviada quando já passou mais de 3 anos desde o vencimento da receita.",
+    placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente" }],
+    padrao: `🌟 *{{NOME}}, sentimos sua falta por aqui!*\n\nFaz um tempinho que você não aparece na Ótica Líder e queríamos te dar um motivo especial pra voltar! 🎁\n\nPreparamos uma *CONDIÇÃO EXCLUSIVA* pra você, só por ser nosso cliente!\n\nPosso te contar os detalhes? 😄`,
+  },
+  {
+    id: "receita_vencida_normal",
+    label: "Receita — vencida (até 3 anos)",
+    descricao: "Enviada quando a receita já venceu há menos de 3 anos.",
+    placeholders: [
+      { tag: "{{NOME}}", explicacao: "Primeiro nome do cliente (maiúsculo)" },
+      { tag: "{{TEMPO}}", explicacao: "Tempo decorrido desde o vencimento (ex: 2 MESES)" },
+    ],
+    padrao: `🚨 *{{NOME}}, SUA RECEITA VENCEU HÁ {{TEMPO}}!* 👀\n\nComo *receitas de óculos vencem em 1 ano*, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`,
+  },
+  {
+    id: "receita_proxima_vencer",
+    label: "Receita — prestes a vencer",
+    descricao: "Enviada quando faltam poucos dias para a receita vencer.",
+    placeholders: [
+      { tag: "{{NOME}}", explicacao: "Primeiro nome do cliente (maiúsculo)" },
+      { tag: "{{DIAS}}", explicacao: "Quantidade de dias que faltam para vencer" },
+    ],
+    padrao: `🚨 *{{NOME}}, SUA RECEITA VENCE EM {{DIAS}} DIAS!* 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`,
+  },
+  {
+    id: "promo_receita_vencida",
+    label: "Promoção — Consulta Grátis",
+    descricao: "Mensagem usada no botão de promoção \"Consulta Grátis\" para receitas vencidas.",
+    placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente" }],
+    padrao: `Oi, {{NOME}}! Faz mais de 1 ano do seu último *exame de vista* aqui na Ótica Líder — *Hora de atualizar!*\n\nExame de Vista Grátis na compra dos óculos de grau. *Quer aproveitar?*\n\n1️⃣ Sim, quero agendar!\n2️⃣ Quero saber mais\n3️⃣ Agora não`,
+  },
+  {
+    id: "aniversario_com_receita",
+    label: "Aniversário + Receita (combinada)",
+    descricao: "Enviada quando o cliente está de aniversário e também com a receita vencida ou prestes a vencer.",
+    placeholders: [
+      { tag: "{{NOME}}", explicacao: "Primeiro nome do cliente (maiúsculo)" },
+      { tag: "{{TITULO}}", explicacao: "Frase de destaque montada automaticamente pelo sistema" },
+    ],
+    padrao: `🎉 {{NOME}}, {{TITULO}}! 😍\n\nComo a receita de óculos vence em 1 ano, já está na hora de atualizar seu exame de vista 😊\n\n🎁 *Consulta GRATUITA ➕ 20% OFF* em qualquer produto da loja!\n\nSeu cupom: ANIVERSARIO20 ✨\n\nO desconto também vale para toda sua família 😊\n\nJá posso marcar sua consulta? 😄`,
+  },
+];
+
+const EMAIL_ADMIN_MENSAGENS = "jaredandrade100@gmail.com";
+
 type Cliente = {
   id: number;
   nome: string;
@@ -71,7 +152,48 @@ export default function CRM() {
   }>>({});
 
   const [diaSelecionado, setDiaSelecionado] = useState<number | null>(null);
-  const [abaAtiva, setAbaAtiva] = useState<"dashboard" | "clientes" | "calendario">("dashboard");
+  const [abaAtiva, setAbaAtiva] = useState<"dashboard" | "clientes" | "calendario" | "mensagens">("dashboard");
+
+  // Templates de mensagens do WhatsApp (editáveis pelo admin)
+  const [templates, setTemplates] = useState<Record<string, string>>(() =>
+    Object.fromEntries(TEMPLATES_DEFINICAO.map(t => [t.id, t.padrao]))
+  );
+  const [templatesRascunho, setTemplatesRascunho] = useState<Record<string, string>>({});
+  const [templateSalvando, setTemplateSalvando] = useState<string | null>(null);
+  const [templateSalvo, setTemplateSalvo] = useState<string | null>(null);
+  const [templateExcluindo, setTemplateExcluindo] = useState<string | null>(null);
+
+  const isAdminMensagens = (session?.user?.email || "").toLowerCase() === EMAIL_ADMIN_MENSAGENS;
+
+  // ===== MENSAGENS PROGRAMADAS (regras personalizadas por dias de receita) =====
+  type TipoCondicao = "todos" | "aniversario_mes" | "aniversario_hoje" | "receita_vence_hoje" | "receita_vencida" | "receita_dias";
+  type OperadorDias = "menor" | "maior" | "entre";
+
+  type MensagemProgramada = {
+    id: string;
+    nome: string;
+    descricao?: string | null;
+    texto: string;
+    tipo_condicao?: TipoCondicao | null;
+    operador: OperadorDias | null;
+    dias_min: number | null;
+    dias_max: number | null;
+    ativo: boolean;
+  };
+  const [mensagensProgramadas, setMensagensProgramadas] = useState<MensagemProgramada[]>([]);
+  const [mostrarFormNovaMsg, setMostrarFormNovaMsg] = useState(false);
+  const [novoMsgNome, setNovoMsgNome] = useState("");
+  const [novoMsgDescricao, setNovoMsgDescricao] = useState("");
+  const [novoMsgTexto, setNovoMsgTexto] = useState("");
+  const [novoMsgTipoCondicao, setNovoMsgTipoCondicao] = useState<TipoCondicao>("aniversario_mes");
+  const [novoMsgOperador, setNovoMsgOperador] = useState<OperadorDias>("maior");
+  const [novoMsgDiasMin, setNovoMsgDiasMin] = useState("");
+  const [novoMsgDiasMax, setNovoMsgDiasMax] = useState("");
+  const [salvandoNovaMsg, setSalvandoNovaMsg] = useState(false);
+  const [confirmarExclusaoId, setConfirmarExclusaoId] = useState<string | null>(null);
+  const [excluindoMsgId, setExcluindoMsgId] = useState<string | null>(null);
+  const [mensagensProgramadasRascunho, setMensagensProgramadasRascunho] = useState<Record<string, string>>({});
+  const [mensagemProgramadaSalvandoId, setMensagemProgramadaSalvandoId] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Paginação
@@ -132,6 +254,268 @@ export default function CRM() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Carrega as mensagens personalizadas salvas no banco (se existirem), senão usa o padrão
+  useEffect(() => {
+    if (!session) return;
+    const carregarTemplates = async () => {
+      const { data, error } = await supabase.from("mensagens_templates").select("id, texto");
+      if (error) {
+        console.error("Erro ao carregar mensagens personalizadas:", error);
+        return;
+      }
+      if (data && data.length > 0) {
+        setTemplates(prev => {
+          const atualizado = { ...prev };
+          data.forEach((row: { id: string; texto: string }) => {
+            if (row.texto) atualizado[row.id] = row.texto;
+          });
+          return atualizado;
+        });
+      }
+    };
+    carregarTemplates();
+  }, [session]);
+
+  // Carrega as mensagens programadas (regras personalizadas por dias de receita)
+  const carregarMensagensProgramadas = async () => {
+    const { data, error } = await supabase
+      .from("mensagens_programadas")
+      .select("*")
+      .order("criado_em", { ascending: false });
+    if (error) {
+      console.error("Erro ao carregar mensagens programadas:", error);
+      return;
+    }
+    if (data) {
+      const mensagens = data as MensagemProgramada[];
+      setMensagensProgramadas(mensagens);
+      setMensagensProgramadasRascunho(prev => {
+        const atualizado = { ...prev };
+        mensagens.forEach(m => { if (atualizado[m.id] === undefined) atualizado[m.id] = m.texto; });
+        return atualizado;
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!session) return;
+    carregarMensagensProgramadas();
+  }, [session]);
+
+  const criarMensagemProgramada = async () => {
+    if (!isAdminMensagens) return;
+    if (!novoMsgNome.trim() || !novoMsgTexto.trim()) {
+      alert("Preencha o nome e o texto da mensagem.");
+      return;
+    }
+
+    const usaDias = novoMsgTipoCondicao === "receita_dias";
+    let diasMin: number | null = null;
+    let diasMax: number | null = null;
+    let operador: OperadorDias | null = null;
+
+    if (usaDias) {
+      const valorMin = Number(novoMsgDiasMin);
+      if (Number.isNaN(valorMin) || novoMsgDiasMin.trim() === "") {
+        alert("Informe a quantidade de dias.");
+        return;
+      }
+      diasMin = valorMin;
+      operador = novoMsgOperador;
+
+      if (novoMsgOperador === "entre") {
+        const valorMax = Number(novoMsgDiasMax);
+        if (Number.isNaN(valorMax) || novoMsgDiasMax.trim() === "") {
+          alert("Informe o dia final do intervalo.");
+          return;
+        }
+        if (valorMax < valorMin) {
+          alert("O dia final precisa ser maior que o dia inicial.");
+          return;
+        }
+        diasMax = valorMax;
+      }
+    }
+
+    setSalvandoNovaMsg(true);
+    const { error } = await supabase.from("mensagens_programadas").insert([{
+      nome: novoMsgNome.trim(),
+      descricao: novoMsgDescricao.trim() || null,
+      texto: novoMsgTexto,
+      tipo_condicao: novoMsgTipoCondicao,
+      operador,
+      dias_min: diasMin,
+      dias_max: diasMax,
+      ativo: true,
+    }]);
+    setSalvandoNovaMsg(false);
+
+    if (error) {
+      alert("Erro ao criar a mensagem: " + error.message);
+      return;
+    }
+
+    setNovoMsgNome("");
+    setNovoMsgDescricao("");
+    setNovoMsgTexto("");
+    setNovoMsgTipoCondicao("aniversario_mes");
+    setNovoMsgOperador("maior");
+    setNovoMsgDiasMin("");
+    setNovoMsgDiasMax("");
+    setMostrarFormNovaMsg(false);
+    carregarMensagensProgramadas();
+  };
+
+  const salvarMensagemProgramada = async (m: MensagemProgramada) => {
+    const texto = mensagensProgramadasRascunho[m.id] ?? m.texto;
+    if (!texto.trim()) {
+      alert("O texto da mensagem não pode ficar vazio.");
+      return;
+    }
+
+    setMensagemProgramadaSalvandoId(m.id);
+    const { error } = await supabase
+      .from("mensagens_programadas")
+      .update({ texto })
+      .eq("id", m.id);
+    setMensagemProgramadaSalvandoId(null);
+
+    if (error) {
+      alert("Erro ao salvar a mensagem: " + error.message);
+      return;
+    }
+
+    setMensagensProgramadas(prev => prev.map(item => item.id === m.id ? { ...item, texto } : item));
+  };
+
+  const excluirMensagemProgramada = async (id: string) => {
+    setExcluindoMsgId(id);
+    const { error } = await supabase.from("mensagens_programadas").delete().eq("id", id);
+    setExcluindoMsgId(null);
+    setConfirmarExclusaoId(null);
+    if (error) {
+      alert("Erro ao excluir a mensagem: " + error.message);
+      return;
+    }
+    setMensagensProgramadas(prev => prev.filter(m => m.id !== id));
+    setMensagensProgramadasRascunho(prev => {
+      const atualizado = { ...prev };
+      delete atualizado[id];
+      return atualizado;
+    });
+  };
+
+  const tipoCondicaoEfetivo = (m: MensagemProgramada): TipoCondicao => m.tipo_condicao || "receita_dias";
+
+  const descricaoCondicao = (m: MensagemProgramada) => {
+    const tipo = tipoCondicaoEfetivo(m);
+    if (tipo === "todos") return "Todos os clientes";
+    if (tipo === "aniversario_mes") return "Aniversariantes do mês";
+    if (tipo === "aniversario_hoje") return "Aniversariante do dia";
+    if (tipo === "receita_vence_hoje") return "Receita vence hoje (1 ano)";
+    if (tipo === "receita_vencida") return "Receita vencida (a partir de 1 ano)";
+    if (m.operador === "menor") return `Receita há menos de ${m.dias_min} dias`;
+    if (m.operador === "maior") return `Receita há mais de ${m.dias_min} dias`;
+    return `Receita entre ${m.dias_min} e ${m.dias_max} dias`;
+  };
+
+  // As condições numéricas sempre usam a data da receita. As condições de aniversário usam nascimento.
+  const mensagensProgramadasDoCliente = (cliente: Cliente) => {
+    return mensagensProgramadas.filter(m => {
+      if (!m.ativo) return false;
+      const tipo = tipoCondicaoEfetivo(m);
+
+      if (tipo === "todos") return true;
+      if (tipo === "aniversario_mes") return isAniversarioMes(cliente.nascimento);
+      if (tipo === "aniversario_hoje") return isAniversarioHoje(cliente.nascimento);
+
+      const dias = diasPassadosReceita(cliente.receita);
+      if (dias === null) return false;
+      if (tipo === "receita_vence_hoje") return dias === 365;
+      if (tipo === "receita_vencida") return dias >= 365;
+      if (m.operador === "menor" && m.dias_min !== null) return dias < m.dias_min;
+      if (m.operador === "maior" && m.dias_min !== null) return dias > m.dias_min;
+      if (m.operador === "entre" && m.dias_min !== null) return dias >= m.dias_min && dias <= (m.dias_max ?? m.dias_min);
+      return false;
+    });
+  };
+
+  const getMsgProgramada = (m: MensagemProgramada, nomeCompleto: string) => {
+    const primeiroNome = nomeCompleto.split(" ")[0];
+    return m.texto.split("{{NOME}}").join(primeiroNome);
+  };
+
+  const mensagemFiltroSelecionada = mensagensProgramadas.find(
+    m => filtro.startsWith("mensagem_") && m.id === filtro.slice("mensagem_".length) && m.ativo
+  ) || null;
+
+  useEffect(() => {
+    if (filtro.startsWith("mensagem_") && !mensagemFiltroSelecionada) {
+      setFiltro("todos");
+    }
+  }, [filtro, mensagemFiltroSelecionada]);
+
+  // Sincroniza o rascunho de edição sempre que os templates (ou a aba) mudam
+  useEffect(() => {
+    if (abaAtiva === "mensagens") {
+      setTemplatesRascunho(templates);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abaAtiva]);
+
+  // Substitui as variáveis {{VAR}} de um template pelos valores reais
+  const preencherTemplate = (id: string, vars: Record<string, string>) => {
+    let texto = templates[id] ?? (TEMPLATES_DEFINICAO.find(t => t.id === id)?.padrao || "");
+    Object.entries(vars).forEach(([chave, valor]) => {
+      texto = texto.split(`{{${chave}}}`).join(valor);
+    });
+    return texto;
+  };
+
+  const salvarTemplate = async (id: string) => {
+    if (!isAdminMensagens) return;
+    const texto = templatesRascunho[id];
+    if (texto === undefined) return;
+    setTemplateSalvando(id);
+    const { error } = await supabase.from("mensagens_templates").upsert(
+      { id, texto, updated_at: new Date().toISOString() },
+      { onConflict: "id" }
+    );
+    setTemplateSalvando(null);
+    if (error) {
+      alert("Erro ao salvar a mensagem: " + error.message);
+      return;
+    }
+    setTemplates(prev => ({ ...prev, [id]: texto }));
+    setTemplateSalvo(id);
+    setTimeout(() => setTemplateSalvo(null), 2000);
+  };
+
+  const restaurarTemplatePadrao = (id: string) => {
+    const def = TEMPLATES_DEFINICAO.find(t => t.id === id);
+    if (!def) return;
+    setTemplatesRascunho(prev => ({ ...prev, [id]: def.padrao }));
+  };
+
+  const excluirTemplatePersonalizado = async (id: string) => {
+    if (!isAdminMensagens) return;
+    const def = TEMPLATES_DEFINICAO.find(t => t.id === id);
+    if (!def || !confirm(`Excluir a mensagem personalizada "${def.label}" e voltar ao texto padrão?`)) return;
+
+    setTemplateExcluindo(id);
+    const { error } = await supabase.from("mensagens_templates").delete().eq("id", id);
+    setTemplateExcluindo(null);
+    if (error) {
+      alert("Erro ao excluir a mensagem: " + error.message);
+      return;
+    }
+
+    setTemplates(prev => ({ ...prev, [id]: def.padrao }));
+    setTemplatesRascunho(prev => ({ ...prev, [id]: def.padrao }));
+    setTemplateSalvo(id);
+    setTimeout(() => setTemplateSalvo(null), 2000);
+  };
 
   useEffect(() => {
     async function carregarDados() {
@@ -415,7 +799,7 @@ const statusData = todosStatus;
 
   const isReceitaVencidaTotal = (data: string | null) => {
     const dias = diasPassadosReceita(data);
-    return dias !== null && dias > 365;
+    return dias !== null && dias >= 365;
   };
 
   // FUNÇÃO PARA FORMATAR TEMPO DECORRIDO
@@ -436,44 +820,50 @@ const statusData = todosStatus;
     }
   };
 
-  // MENSAGENS WHATSAPP ATUALIZADAS
+  // MENSAGENS WHATSAPP (editáveis na aba "Mensagens")
   const getMsgAniversarioHoje = (nomeCompleto: string) => {
     const primeiroNome = nomeCompleto.split(" ")[0].toUpperCase();
-    return `🎉 *${primeiroNome}, ANIVERSARIANTE DO DIA TEM PRESENTE!* 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 *25% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO25\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`;
+    return preencherTemplate("aniversario_hoje", { NOME: primeiroNome });
   };
 
   const getMsgAniversarioMes = (nomeCompleto: string) => {
     const primeiroNome = nomeCompleto.split(" ")[0].toUpperCase();
-    return `🎉 *${primeiroNome}, ANIVERSARIANTE DO MÊS TEM PRESENTE!* 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 *20% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO20\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`;
+    return preencherTemplate("aniversario_mes", { NOME: primeiroNome });
   };
 
   const getMsgReceitaHoje = (nomeCompleto: string) => {
     const primeiroNome = nomeCompleto.split(" ")[0];
-    return `🚨 ${primeiroNome}, SUA RECEITA VENCEU HOJE! 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`;
+    return preencherTemplate("receita_hoje", { NOME: primeiroNome });
   };
 
   const getMsgReceitaVencida = (nomeCompleto: string, diasVencidos: number) => {
     const primeiroNome = nomeCompleto.split(" ")[0];
     const tempoFormatado = formatarTempoDecorrido(diasVencidos);
-    
+
     // Se faz mais de 3 anos (3 * 365 = 1095 dias)
     if (diasVencidos > 1095) {
-      return `🌟 *${primeiroNome}, sentimos sua falta por aqui!*\n\nFaz um tempinho que você não aparece na Ótica Líder e queríamos te dar um motivo especial pra voltar! 🎁\n\nPreparamos uma *CONDIÇÃO EXCLUSIVA* pra você, só por ser nosso cliente!\n\nPosso te contar os detalhes? 😄`;
+      return preencherTemplate("receita_vencida_longa", { NOME: primeiroNome });
     }
-    
+
     // Se faz menos de 3 anos
-    return `🚨 *${primeiroNome.toUpperCase()}, SUA RECEITA VENCEU HÁ ${tempoFormatado.toUpperCase()}!* 👀\n\nComo *receitas de óculos vencem em 1 ano*, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`;
+    return preencherTemplate("receita_vencida_normal", {
+      NOME: primeiroNome.toUpperCase(),
+      TEMPO: tempoFormatado.toUpperCase(),
+    });
   };
 
   const getMsgReceitaProximaVencer = (nomeCompleto: string, diasFaltando: number) => {
     const primeiroNome = nomeCompleto.split(" ")[0];
-    return `🚨 *${primeiroNome.toUpperCase()}, SUA RECEITA VENCE EM ${diasFaltando} DIAS!* 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`;
+    return preencherTemplate("receita_proxima_vencer", {
+      NOME: primeiroNome.toUpperCase(),
+      DIAS: String(diasFaltando),
+    });
   };
 
   // MENSAGEM DA PROMOÇÃO "CONSULTA GRÁTIS" (receita vencida)
   const getMsgPromoReceitaVencida = (nomeCompleto: string) => {
     const primeiroNome = nomeCompleto.split(" ")[0];
-    return `Oi, ${primeiroNome}! Faz mais de 1 ano do seu último *exame de vista* aqui na Ótica Líder — *Hora de atualizar!*\n\nExame de Vista Grátis na compra dos óculos de grau. *Quer aproveitar?*\n\n1️⃣ Sim, quero agendar!\n2️⃣ Quero saber mais\n3️⃣ Agora não`;
+    return preencherTemplate("promo_receita_vencida", { NOME: primeiroNome });
   };
 
   // FUNÇÃO PARA OBTER A MENSAGEM CORRETA BASEADA NO STATUS
@@ -525,7 +915,7 @@ const statusData = todosStatus;
       titulo = `SUA *RECEITA VENCE EM ${diasFaltando} DIAS* E VOCÊ GANHOU UM *PRESENTE DE ANIVERSÁRIO*`;
     }
 
-    return `🎉 ${primeiroNome}, ${titulo}! 😍\n\nComo a receita de óculos vence em 1 ano, já está na hora de atualizar seu exame de vista 😊\n\n🎁 *Consulta GRATUITA ➕ 20% OFF* em qualquer produto da loja!\n\nSeu cupom: ANIVERSARIO20 ✨\n\nO desconto também vale para toda sua família 😊\n\nJá posso marcar sua consulta? 😄`;
+    return preencherTemplate("aniversario_com_receita", { NOME: primeiroNome, TITULO: titulo });
   };
 
   const whatsapp = (numero: string, msg = "", nomeCliente = "", tipoMsg = "") => {
@@ -788,9 +1178,9 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
       const dias = diasPassadosReceita(c.receita);
       return dias !== null && dias >= 365;
     });
-    if (filtro.startsWith("origem_")) {
-      const origemAlvo = filtro.replace("origem_", "");
-      f = f.filter((c) => c.origem === origemAlvo);
+    if (filtro === "clientes_novos") f = f.filter((c) => !!c.origem);
+    if (mensagemFiltroSelecionada) {
+      f = f.filter(c => mensagensProgramadasDoCliente(c).some(m => m.id === mensagemFiltroSelecionada.id));
     }
 
     if (pesquisa) {
@@ -878,7 +1268,7 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
       // Filtro "todos": ordenar por nome
       return sortOrder === 'asc' ? a.nome.localeCompare(b.nome) : b.nome.localeCompare(a.nome);
     });
-  }, [clientes, filtro, pesquisa, sortOrder, statusEnvio, statusEnvioIndependente, statusPromo]);
+  }, [clientes, filtro, pesquisa, sortOrder, statusEnvio, statusEnvioIndependente, statusPromo, mensagensProgramadas, mensagemFiltroSelecionada]);
 
   // Reset para página 1 quando filtro/pesquisa/ordem mudam
   useEffect(() => { setPaginaAtual(1); }, [filtro, pesquisa, sortOrder]);
@@ -989,7 +1379,7 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
   }, [clientes]);
 
   // CONTADORES POR FILTRO
-  const filtroContagens = useMemo(() => {
+  const filtroContagens = useMemo<Record<string, number>>(() => {
     const contatadosIds = new Set<number>();
     Object.entries(statusEnvio).forEach(([id, s]) => {
       if (s.aniversarioNoDia || s.receitaNoDia) contatadosIds.add(Number(id));
@@ -999,6 +1389,7 @@ if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interess
     });
     return {
       todos:             clientes.length,
+      clientes_novos:    clientes.filter(c => !!c.origem).length,
       aniv_mes:          clientes.filter(c => isAniversarioMes(c.nascimento)).length,
       aniv_hoje:         clientes.filter(c => isAniversarioHoje(c.nascimento)).length,
       receitas_vencer:   clientes.filter(c => isReceitaParaVencer(c.receita)).length,
@@ -1015,8 +1406,14 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
         const dias = diasPassadosReceita(c.receita);
         return dias !== null && dias >= 365;
       }).length,
+      ...Object.fromEntries(
+        mensagensProgramadas.filter(m => m.ativo).map(m => [
+          `mensagem_${m.id}`,
+          clientes.filter(c => mensagensProgramadasDoCliente(c).some(cm => cm.id === m.id)).length,
+        ])
+      ),
     };
-  }, [clientes, statusEnvio, statusEnvioIndependente, respostas]);
+  }, [clientes, statusEnvio, statusEnvioIndependente, respostas, mensagensProgramadas]);
 
   // CONTADOR DA PROMOÇÃO "CONSULTA GRÁTIS" (contatados / elegíveis)
   const promoElegiveisCount = useMemo(() => {
@@ -1086,6 +1483,64 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
     );
   }
 
+  const renderCartoesMensagensProgramadas = () => (
+    <div className="mt-8 space-y-4">
+      {mensagensProgramadas.length === 0 && !mostrarFormNovaMsg && (
+        <p className="text-sm text-slate-400 italic">Nenhuma mensagem programada criada ainda.</p>
+      )}
+      {mensagensProgramadas.map((m) => {
+        const valorAtual = mensagensProgramadasRascunho[m.id] ?? m.texto;
+        const alterado = valorAtual !== m.texto;
+        return (
+          <div key={m.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-7">
+            {confirmarExclusaoId === m.id ? (
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-sm text-slate-700">
+                  Tem certeza que deseja excluir <span className="font-bold">"{m.nome}"</span>? Essa ação não pode ser desfeita.
+                </p>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => setConfirmarExclusaoId(null)} className="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition-all">Cancelar</button>
+                  <button onClick={() => excluirMensagemProgramada(m.id)} disabled={excluindoMsgId === m.id} className="px-3 py-1.5 rounded-full text-xs font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 transition-all">
+                    {excluindoMsgId === m.id ? "Excluindo..." : "Excluir"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-4 mb-1 flex-wrap">
+                  <div>
+                    <h4 className="font-bold text-slate-900">{m.nome}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">{m.descricao || "Mensagem programada personalizada"}</p>
+                    <p className="text-xs font-bold text-indigo-600 mt-1">{descricaoCondicao(m)}</p>
+                  </div>
+                  {!m.ativo && <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">Inativa</span>}
+                </div>
+                <textarea
+                  value={valorAtual}
+                  onChange={(e) => setMensagensProgramadasRascunho(prev => ({ ...prev, [m.id]: e.target.value }))}
+                  rows={6}
+                  className="w-full mt-3 p-3 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+                />
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  <span title="Primeiro nome do cliente" className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full cursor-help">{"{{NOME}}"}</span>
+                </div>
+                <div className="flex items-center justify-between mt-4">
+                  <button onClick={() => setMensagensProgramadasRascunho(prev => ({ ...prev, [m.id]: m.texto }))} className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors">Restaurar salvo</button>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setConfirmarExclusaoId(m.id)} className="text-xs font-bold text-slate-400 hover:text-red-600 transition-colors">Excluir mensagem</button>
+                    <button onClick={() => salvarMensagemProgramada(m)} disabled={!alterado || mensagemProgramadaSalvandoId === m.id} className="px-5 py-2 rounded-full text-sm font-bold bg-indigo-600 text-white shadow-md shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                      {mensagemProgramadaSalvandoId === m.id ? "Salvando..." : "Salvar mensagem"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
       {/* HEADER */}
@@ -1111,6 +1566,9 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
           <button onClick={() => setAbaAtiva("dashboard")} className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all ${abaAtiva === "dashboard" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}>Dashboard</button>
           <button onClick={() => setAbaAtiva("clientes")} className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all ${abaAtiva === "clientes" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}>Base de Clientes</button>
           <button onClick={() => setAbaAtiva("calendario")} className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all ${abaAtiva === "calendario" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}>Calendário</button>
+          {isAdminMensagens && (
+            <button onClick={() => setAbaAtiva("mensagens")} className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all ${abaAtiva === "mensagens" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}>💬 Mensagens</button>
+          )}
         </div>
 
         <div className="space-y-8">
@@ -1296,6 +1754,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                     className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg pl-4 pr-10 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
                     <option value="todos">Todos os Clientes ({filtroContagens.todos})</option>
+                    <option value="clientes_novos">✨ Clientes novos ({filtroContagens.clientes_novos})</option>
 <option value="promo_receita" style={{ color: "#dc2626", fontWeight: 700 }}>💥Promoção Consulta Grátis💥 ({filtroContagens.promo_receita})</option>
 
 <option disabled>─────────────────────</option>
@@ -1313,8 +1772,8 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
 <option value="interessados">👍 Interessados ({filtroContagens.interessados})</option>
 
 <option disabled>─────────────────────</option>
-{ORIGENS.map((o) => (
-  <option key={o} value={`origem_${o}`}>✨ {o} ({origemBreakdown[o]})</option>
+{mensagensProgramadas.filter(m => m.ativo).map((m) => (
+  <option key={m.id} value={`mensagem_${m.id}`}>💬 {m.nome} ({filtroContagens[`mensagem_${m.id}`] ?? 0})</option>
 ))}
                 
                   </select>
@@ -1528,7 +1987,11 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                       <div className="col-span-1 flex flex-col gap-1 items-end">
                         {/* LINHA 1: WA link + histórico + observações */}
                         <div className="flex gap-0.5 items-center">
-                          {(anivMes && statusRecText) ? (
+                          {mensagemFiltroSelecionada ? (
+                            <button onClick={() => whatsapp(c.telefone, getMsgProgramada(mensagemFiltroSelecionada, c.nome || ""), c.nome, mensagemFiltroSelecionada.nome)} className="p-1 hover:scale-110 transition-transform" title={mensagemFiltroSelecionada.nome}>
+                              <WhatsAppIcon />
+                            </button>
+                          ) : (anivMes && statusRecText) ? (
                             <button onClick={() => whatsapp(c.telefone, getMsgAniversarioComReceita(c.nome || "", c.receita || "", c.nascimento || ""), c.nome, "Aniversário + Receita")} className="p-1 hover:scale-110 transition-transform" title="Mensagem combinada"><WhatsAppIconBlue /></button>
                           ) : (
                             <>
@@ -1683,6 +2146,184 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {abaAtiva === "mensagens" && isAdminMensagens && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-2"><span className="w-1.5 h-6 bg-indigo-600 rounded-full"></span> Mensagens de WhatsApp</h3>
+                <p className="text-sm text-slate-500">
+                  Edite aqui os textos que as funcionárias enviam ao clicar nos botões de WhatsApp. Ao trocar uma promoção, basta atualizar a mensagem correspondente — não precisa mexer no código.
+                  As partes entre <code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-600 font-mono text-xs">{"{{assim}}"}</code> são preenchidas automaticamente pelo sistema (nome do cliente, dias, etc.) — não apague essas partes, só o resto do texto.
+                </p>
+              </div>
+
+              {TEMPLATES_DEFINICAO.map((def) => {
+                const valorAtual = templatesRascunho[def.id] ?? templates[def.id] ?? def.padrao;
+                const alterado = valorAtual !== (templates[def.id] ?? def.padrao);
+                return (
+                  <div key={def.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                    <div className="flex items-start justify-between gap-4 mb-1 flex-wrap">
+                      <div>
+                        <h4 className="font-bold text-slate-900">{def.label}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">{def.descricao}</p>
+                      </div>
+                      {templateSalvo === def.id && (
+                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">✓ Salvo</span>
+                      )}
+                    </div>
+
+                    <textarea
+                      value={valorAtual}
+                      onChange={(e) => setTemplatesRascunho(prev => ({ ...prev, [def.id]: e.target.value }))}
+                      rows={6}
+                      className="w-full mt-3 p-3 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+                    />
+
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      {def.placeholders.map(p => (
+                        <span key={p.tag} title={p.explicacao} className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full cursor-help">
+                          {p.tag}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between mt-4">
+                      <button
+                        onClick={() => restaurarTemplatePadrao(def.id)}
+                        className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors"
+                      >
+                        Restaurar padrão
+                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => excluirTemplatePersonalizado(def.id)}
+                          disabled={templateExcluindo === def.id}
+                          className="text-xs font-bold text-slate-400 hover:text-red-600 transition-colors disabled:opacity-40"
+                        >
+                          {templateExcluindo === def.id ? "Excluindo..." : "Excluir mensagem"}
+                        </button>
+                        <button
+                          onClick={() => salvarTemplate(def.id)}
+                          disabled={!alterado || templateSalvando === def.id}
+                          className="px-5 py-2 rounded-full text-sm font-bold bg-indigo-600 text-white shadow-md shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                          {templateSalvando === def.id ? "Salvando..." : "Salvar mensagem"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+                            })}
+
+              {renderCartoesMensagensProgramadas()}
+
+              {/* MENSAGENS PROGRAMADAS (cabeçalho e criação) */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mt-8">
+                <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
+                  <div>
+                    <h3 className="font-bold text-slate-900 flex items-center gap-2"><span className="w-1.5 h-6 bg-indigo-600 rounded-full"></span> Mensagens Programadas</h3>
+                    <p className="text-sm text-slate-500 mt-1 max-w-2xl">
+                      Crie mensagens que aparecem como botões extras de WhatsApp quando o cliente se encaixar no critério escolhido. Para aniversários, a referência é a data de nascimento; para receitas, a referência é a data da receita e o vencimento ocorre após 365 dias.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setMostrarFormNovaMsg(v => !v)}
+                    className="px-5 py-2 rounded-full text-sm font-bold bg-indigo-600 text-white shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all whitespace-nowrap"
+                  >
+                    {mostrarFormNovaMsg ? "Cancelar" : "+ Criar mensagem"}
+                  </button>
+                </div>
+
+                {mostrarFormNovaMsg && (
+                  <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 uppercase">Nome da mensagem</label>
+                      <input
+                        type="text"
+                        value={novoMsgNome}
+                        onChange={(e) => setNovoMsgNome(e.target.value)}
+                        placeholder="Ex: Promoção Dia das Mães"
+                        className="w-full mt-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 uppercase">Descrição da mensagem (opcional)</label>
+                      <input type="text" value={novoMsgDescricao} onChange={(e) => setNovoMsgDescricao(e.target.value)} placeholder="Ex: Enviada para clientes em uma campanha especial" className="w-full mt-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-3">
+                        <label className="text-xs font-bold text-slate-600 uppercase">Critério de disparo</label>
+                        <select
+                          value={novoMsgTipoCondicao}
+                          onChange={(e) => setNovoMsgTipoCondicao(e.target.value as TipoCondicao)}
+                          className="w-full mt-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                        >
+                          <option value="todos">TODOS os clientes</option>
+                          <option value="aniversario_mes">Aniversariantes do mês</option>
+                          <option value="aniversario_hoje">Aniversariante do dia</option>
+                          <option value="receita_vence_hoje">Receita vence hoje (data da receita + 1 ano)</option>
+                          <option value="receita_vencida">Receita vencida (data da receita + 1 ano)</option>
+                          <option value="receita_dias">Dias desde a receita</option>
+                        </select>
+                        <p className="text-[11px] text-slate-500 mt-1">TODOS envia para qualquer cliente. Aniversários usam a data de nascimento. Receita vencendo hoje usa receita + 1 ano. Receita vencida inclui quem já completou 1 ano ou mais. Somente “Dias desde a receita” usa menos/mais/entre X e Y dias.</p>
+                      </div>
+                      {novoMsgTipoCondicao === "receita_dias" && (
+                        <>
+                          <div>
+                            <label className="text-xs font-bold text-slate-600 uppercase">Comparação</label>
+                            <select
+                              value={novoMsgOperador}
+                              onChange={(e) => setNovoMsgOperador(e.target.value as OperadorDias)}
+                              className="w-full mt-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                            >
+                              <option value="menor">Menos de X dias</option>
+                              <option value="maior">Mais de X dias</option>
+                              <option value="entre">Entre X e Y dias</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-600 uppercase">{novoMsgOperador === "entre" ? "Dias (a partir de)" : "Dias"}</label>
+                            <input type="number" value={novoMsgDiasMin} onChange={(e) => setNovoMsgDiasMin(e.target.value)} placeholder="Ex: 180" className="w-full mt-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                          </div>
+                          {novoMsgOperador === "entre" && (
+                            <div>
+                              <label className="text-xs font-bold text-slate-600 uppercase">Dias (até)</label>
+                              <input type="number" value={novoMsgDiasMax} onChange={(e) => setNovoMsgDiasMax(e.target.value)} placeholder="Ex: 360" className="w-full mt-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 uppercase">Texto da mensagem</label>
+                      <textarea
+                        value={novoMsgTexto}
+                        onChange={(e) => setNovoMsgTexto(e.target.value)}
+                        rows={5}
+                        placeholder="Escreva a mensagem aqui. Use {{NOME}} para inserir o nome do cliente."
+                        className="w-full mt-1 p-3 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+                      />
+                      <span className="inline-block mt-2 text-[10px] font-mono font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full">{"{{NOME}}"}</span>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        onClick={criarMensagemProgramada}
+                        disabled={salvandoNovaMsg}
+                        className="px-5 py-2 rounded-full text-sm font-bold bg-indigo-600 text-white shadow-md shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-40 transition-all"
+                      >
+                        {salvandoNovaMsg ? "Criando..." : "Criar mensagem programada"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              </div>
             </div>
           )}
         </div>
