@@ -442,8 +442,8 @@ export default function CRM() {
   };
 
   const getMsgProgramada = (m: MensagemProgramada, nomeCompleto: string) => {
-    const primeiroNome = nomeCompleto.split(" ")[0];
-    return m.texto.split("{{NOME}}").join(primeiroNome);
+    const primeiroNome = nomeCompleto.trim().split(/\s+/)[0] || "";
+    return m.texto.replace(/\{\{\s*NOME\s*\}\}/gi, primeiroNome);
   };
 
   const mensagemFiltroSelecionada = mensagensProgramadas.find(
@@ -920,7 +920,9 @@ const statusData = todosStatus;
 
   const whatsapp = (numero: string, msg = "", nomeCliente = "", tipoMsg = "") => {
     const n = numero.replace(/\D/g, "");
-    window.open(`https://api.whatsapp.com/send?phone=55${n}&text=${encodeURIComponent(msg)}`, "_blank");
+    const primeiroNome = nomeCliente.trim().split(/\s+/)[0] || "";
+    const mensagemFinal = msg.replace(/\{\{\s*NOME\s*\}\}/gi, primeiroNome);
+    window.open(`https://api.whatsapp.com/send?phone=55${n}&text=${encodeURIComponent(mensagemFinal)}`, "_blank");
     if (nomeCliente) {
       setToast({ nome: nomeCliente.split(" ")[0], tipo: tipoMsg });
       setTimeout(() => setToast(null), 3500);
