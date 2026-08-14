@@ -441,10 +441,18 @@ export default function CRM() {
     });
   };
 
-  const getMsgProgramada = (m: MensagemProgramada, nomeCompleto: string) => {
-    const primeiroNome = nomeCompleto.trim().split(/\s+/)[0] || "";
-    return m.texto.replace(/\{\{\s*NOME\s*\}\}/gi, primeiroNome);
+  const preencherVariaveisNome = (texto: string, nomeCompleto: string) => {
+    const nome = nomeCompleto.trim().replace(/\s+/g, " ");
+    const primeiroNome = nome.split(" ")[0] || "";
+    return texto
+      .replace(/\{\{\s*NOME COMPLETO\s*\}\}/g, nome.toLocaleUpperCase("pt-BR"))
+      .replace(/\{\{\s*nome completo\s*\}\}/g, nome.toLocaleLowerCase("pt-BR"))
+      .replace(/\{\{\s*NOME\s*\}\}/g, primeiroNome.toLocaleUpperCase("pt-BR"))
+      .replace(/\{\{\s*nome\s*\}\}/g, primeiroNome.toLocaleLowerCase("pt-BR"));
   };
+
+  const getMsgProgramada = (m: MensagemProgramada, nomeCompleto: string) =>
+    preencherVariaveisNome(m.texto, nomeCompleto);
 
   const mensagemFiltroSelecionada = mensagensProgramadas.find(
     m => filtro.startsWith("mensagem_") && m.id === filtro.slice("mensagem_".length) && m.ativo
@@ -920,8 +928,7 @@ const statusData = todosStatus;
 
   const whatsapp = (numero: string, msg = "", nomeCliente = "", tipoMsg = "") => {
     const n = numero.replace(/\D/g, "");
-    const primeiroNome = nomeCliente.trim().split(/\s+/)[0] || "";
-    const mensagemFinal = msg.replace(/\{\{\s*NOME\s*\}\}/gi, primeiroNome);
+    const mensagemFinal = preencherVariaveisNome(msg, nomeCliente);
     window.open(`https://api.whatsapp.com/send?phone=55${n}&text=${encodeURIComponent(mensagemFinal)}`, "_blank");
     if (nomeCliente) {
       setToast({ nome: nomeCliente.split(" ")[0], tipo: tipoMsg });
@@ -1523,8 +1530,12 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                   rows={6}
                   className="w-full mt-3 p-3 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
                 />
-                <div className="flex flex-wrap items-center gap-2 mt-3">
-                  <span title="Primeiro nome do cliente" className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full cursor-help">{"{{NOME}}"}</span>
+                <div className="mt-3 rounded-lg bg-indigo-50/70 border border-indigo-100 px-3 py-2">
+                  <p className="text-[11px] font-bold text-indigo-700 mb-1">Variáveis disponíveis para personalizar a mensagem:</p>
+                  <p className="text-[10px] text-slate-600 font-mono leading-5">
+                    <span className="font-bold text-indigo-600">{"{{NOME}}"}</span> = primeiro nome em MAIÚSCULAS · <span className="font-bold text-indigo-600">{"{{nome}}"}</span> = primeiro nome em minúsculas<br />
+                    <span className="font-bold text-indigo-600">{"{{NOME COMPLETO}}"}</span> = nome completo em MAIÚSCULAS · <span className="font-bold text-indigo-600">{"{{nome completo}}"}</span> = nome completo em minúsculas
+                  </p>
                 </div>
                 <div className="flex items-center justify-between mt-4">
                   <button onClick={() => setMensagensProgramadasRascunho(prev => ({ ...prev, [m.id]: m.texto }))} className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors">Restaurar salvo</button>
@@ -2310,7 +2321,13 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                         placeholder="Escreva a mensagem aqui. Use {{NOME}} para inserir o nome do cliente."
                         className="w-full mt-1 p-3 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
                       />
-                      <span className="inline-block mt-2 text-[10px] font-mono font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full">{"{{NOME}}"}</span>
+                      <div className="mt-2 rounded-lg bg-indigo-50/70 border border-indigo-100 px-3 py-2">
+                        <p className="text-[11px] font-bold text-indigo-700 mb-1">Variáveis disponíveis:</p>
+                        <p className="text-[10px] text-slate-600 font-mono leading-5">
+                          <span className="font-bold text-indigo-600">{"{{NOME}}"}</span> = primeiro nome em MAIÚSCULAS · <span className="font-bold text-indigo-600">{"{{nome}}"}</span> = primeiro nome em minúsculas<br />
+                          <span className="font-bold text-indigo-600">{"{{NOME COMPLETO}}"}</span> = nome completo em MAIÚSCULAS · <span className="font-bold text-indigo-600">{"{{nome completo}}"}</span> = nome completo em minúsculas
+                        </p>
+                      </div>
                     </div>
 
                     <div className="flex justify-end">
