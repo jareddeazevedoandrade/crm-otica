@@ -19,9 +19,9 @@ const ORIGENS = ["Instagram/Facebook", "Google/Maps", "Indicação", "Outros"] a
 // ===== LOJAS (multi-ótica) =====
 // Para adicionar uma nova ótica no futuro, basta incluir uma entrada aqui.
 type LojaId = "lider" | "design";
-const LOJAS: Record<LojaId, { id: LojaId; nome: string }> = {
-  lider: { id: "lider", nome: "Ótica Líder" },
-  design: { id: "design", nome: "Ótica Design" },
+const LOJAS: Record<LojaId, { id: LojaId; nome: string; logo: string }> = {
+  lider: { id: "lider", nome: "Ótica Líder", logo: "/logo.png" },
+  design: { id: "design", nome: "Ótica Design", logo: "/logo-design.png" },
 };
 const LOJA_PADRAO: LojaId = "lider";
 
@@ -1603,7 +1603,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
+            <img key={LOJAS[loja].logo} src={LOJAS[loja].logo} alt={`Logo ${LOJAS[loja].nome}`} style={{ width: '32px', height: '32px', borderRadius: '8px', objectFit: 'contain' }} />
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">{LOJAS[loja].nome} <span className="text-indigo-600">CRM</span></h1>
           </div>
           <div className="flex items-center gap-4">
