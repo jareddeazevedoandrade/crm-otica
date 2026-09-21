@@ -16,6 +16,18 @@ type Lembrete = {
 
 const ORIGENS = ["Instagram/Facebook", "Google/Maps", "Indicação", "Outros"] as const;
 
+// ===== LOJAS (multi-ótica) =====
+// Para adicionar uma nova ótica no futuro, basta incluir uma entrada aqui.
+type LojaId = "lider" | "design";
+const LOJAS: Record<LojaId, { id: LojaId; nome: string }> = {
+  lider: { id: "lider", nome: "Ótica Líder" },
+  design: { id: "design", nome: "Ótica Design" },
+};
+const LOJA_PADRAO: LojaId = "lider";
+
+// Substitui o placeholder {{LOJA}} pelo nome da ótica ativa nos textos padrão
+const textoComLoja = (padrao: string, lojaId: LojaId) => padrao.split("{{LOJA}}").join(LOJAS[lojaId].nome);
+
 // ===== SISTEMA DE MENSAGENS EDITÁVEIS (WhatsApp) =====
 // Cada mensagem pode ser editada na aba "Mensagens" (acesso restrito ao admin).
 // Use as variáveis entre chaves duplas, ex: {{NOME}}, elas são substituídas automaticamente.
@@ -33,28 +45,28 @@ const TEMPLATES_DEFINICAO: MsgTemplateDef[] = [
     label: "Aniversário — no dia",
     descricao: "Enviada quando o cliente faz aniversário HOJE.",
     placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente (maiúsculo)" }],
-    padrao: `🎉 *{{NOME}}, ANIVERSARIANTE DO DIA TEM PRESENTE!* 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 *25% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO25\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`,
+    padrao: `🎉 *{{NOME}}, ANIVERSARIANTE DO DIA TEM PRESENTE!* 😍\n\nA {{LOJA}} preparou um desconto especial pra você ✨\n\n🎁 *25% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO25\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`,
   },
   {
     id: "aniversario_mes",
     label: "Aniversário — no mês",
     descricao: "Enviada quando o cliente faz aniversário no mês, mas não hoje.",
     placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente (maiúsculo)" }],
-    padrao: `🎉 *{{NOME}}, ANIVERSARIANTE DO MÊS TEM PRESENTE!* 😍\n\nA Ótica Líder preparou um desconto especial pra você ✨\n\n🎁 *20% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO20\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`,
+    padrao: `🎉 *{{NOME}}, ANIVERSARIANTE DO MÊS TEM PRESENTE!* 😍\n\nA {{LOJA}} preparou um desconto especial pra você ✨\n\n🎁 *20% OFF em qualquer produto da loja!*\n\nSeu cupom: ANIVERSARIO20\n\nO desconto também se estende a toda sua família! \nGostaria de aproveitar😄❓`,
   },
   {
     id: "receita_hoje",
     label: "Receita — vence hoje",
     descricao: "Enviada quando a receita do cliente vence exatamente hoje.",
     placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente" }],
-    padrao: `🚨 {{NOME}}, SUA RECEITA VENCEU *HOJE*! 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`,
+    padrao: `🚨 {{NOME}}, SUA RECEITA VENCEU *HOJE*! 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na {{LOJA}}, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`,
   },
   {
     id: "receita_vencida_longa",
     label: "Receita — vencida há mais de 3 anos",
     descricao: "Enviada quando já passou mais de 3 anos desde o vencimento da receita.",
     placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente" }],
-    padrao: `🌟 *{{NOME}}, sentimos sua falta por aqui!*\n\nFaz um tempinho que você não aparece na Ótica Líder e queríamos te dar um motivo especial pra voltar! 🎁\n\nPreparamos uma *CONDIÇÃO EXCLUSIVA* pra você, só por ser nosso cliente!\n\nPosso te contar os detalhes? 😄`,
+    padrao: `🌟 *{{NOME}}, sentimos sua falta por aqui!*\n\nFaz um tempinho que você não aparece na {{LOJA}} e queríamos te dar um motivo especial pra voltar! 🎁\n\nPreparamos uma *CONDIÇÃO EXCLUSIVA* pra você, só por ser nosso cliente!\n\nPosso te contar os detalhes? 😄`,
   },
   {
     id: "receita_vencida_normal",
@@ -64,7 +76,7 @@ const TEMPLATES_DEFINICAO: MsgTemplateDef[] = [
       { tag: "{{NOME}}", explicacao: "Primeiro nome do cliente (maiúsculo)" },
       { tag: "{{TEMPO}}", explicacao: "Tempo decorrido desde o vencimento (ex: 2 MESES)" },
     ],
-    padrao: `🚨 *{{NOME}}, SUA RECEITA VENCEU HÁ {{TEMPO}}!* 👀\n\nComo *receitas de óculos vencem em 1 ano*, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`,
+    padrao: `🚨 *{{NOME}}, SUA RECEITA VENCEU HÁ {{TEMPO}}!* 👀\n\nComo *receitas de óculos vencem em 1 ano*, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na {{LOJA}}, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`,
   },
   {
     id: "receita_proxima_vencer",
@@ -74,14 +86,14 @@ const TEMPLATES_DEFINICAO: MsgTemplateDef[] = [
       { tag: "{{NOME}}", explicacao: "Primeiro nome do cliente (maiúsculo)" },
       { tag: "{{DIAS}}", explicacao: "Quantidade de dias que faltam para vencer" },
     ],
-    padrao: `🚨 *{{NOME}}, SUA RECEITA VENCE EM {{DIAS}} DIAS!* 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na Ótica Líder, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`,
+    padrao: `🚨 *{{NOME}}, SUA RECEITA VENCE EM {{DIAS}} DIAS!* 👀\n\nComo receitas de óculos vencem em 1 ano, estamos passando pra te avisar que já está na hora de atualizar seu exame de vista. 😊\n\nComprou seus óculos na {{LOJA}}, a *consulta é GRATUITA!* 🎁🔥\n\nJá posso marcar sua consulta? 😄`,
   },
   {
     id: "promo_receita_vencida",
     label: "Promoção — Consulta Grátis",
     descricao: "Mensagem usada no botão de promoção \"Consulta Grátis\" para receitas vencidas.",
     placeholders: [{ tag: "{{NOME}}", explicacao: "Primeiro nome do cliente" }],
-    padrao: `Oi, {{NOME}}! Faz mais de 1 ano do seu último *exame de vista* aqui na Ótica Líder — *Hora de atualizar!*\n\nExame de Vista Grátis na compra dos óculos de grau. *Quer aproveitar?*\n\n1️⃣ Sim, quero agendar!\n2️⃣ Quero saber mais\n3️⃣ Agora não`,
+    padrao: `Oi, {{NOME}}! Faz mais de 1 ano do seu último *exame de vista* aqui na {{LOJA}} — *Hora de atualizar!*\n\nExame de Vista Grátis na compra dos óculos de grau. *Quer aproveitar?*\n\n1️⃣ Sim, quero agendar!\n2️⃣ Quero saber mais\n3️⃣ Agora não`,
   },
   {
     id: "aniversario_com_receita",
@@ -105,12 +117,26 @@ type Cliente = {
   telefone: string;
   observacoes: string | null;
   origem: string | null;
+  loja: LojaId;
 };
 
 export default function CRM() {
   const [session, setSession] = useState<any>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+
+  // Loja ativa (Ótica Líder / Ótica Design). Lembrada no navegador de cada funcionária.
+  const [loja, setLoja] = useState<LojaId>(LOJA_PADRAO);
+  useEffect(() => {
+    const salva = typeof window !== "undefined" ? window.localStorage.getItem("crm_loja_ativa") : null;
+    if (salva === "lider" || salva === "design") setLoja(salva);
+  }, []);
+  const trocarLoja = (novaLoja: LojaId) => {
+    setLoja(novaLoja);
+    if (typeof window !== "undefined") window.localStorage.setItem("crm_loja_ativa", novaLoja);
+    setPaginaAtual(1);
+  };
+
   const [filtro, setFiltro] = useState("todos");
   const [pesquisa, setPesquisa] = useState("");
   const [editandoId, setEditandoId] = useState<number | null>(null);
@@ -156,7 +182,7 @@ export default function CRM() {
 
   // Templates de mensagens do WhatsApp (editáveis pelo admin)
   const [templates, setTemplates] = useState<Record<string, string>>(() =>
-    Object.fromEntries(TEMPLATES_DEFINICAO.map(t => [t.id, t.padrao]))
+    Object.fromEntries(TEMPLATES_DEFINICAO.map(t => [t.id, textoComLoja(t.padrao, LOJA_PADRAO)]))
   );
   const [templatesRascunho, setTemplatesRascunho] = useState<Record<string, string>>({});
   const [templateSalvando, setTemplateSalvando] = useState<string | null>(null);
@@ -255,33 +281,41 @@ export default function CRM() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Carrega as mensagens personalizadas salvas no banco (se existirem), senão usa o padrão
+  // Carrega as mensagens personalizadas salvas no banco (se existirem), senão usa o padrão da loja ativa
   useEffect(() => {
     if (!session) return;
     const carregarTemplates = async () => {
-      const { data, error } = await supabase.from("mensagens_templates").select("id, texto");
+      // Começa dos textos padrão já com o nome da loja ativa
+      const padroesDaLoja = Object.fromEntries(
+        TEMPLATES_DEFINICAO.map(t => [t.id, textoComLoja(t.padrao, loja)])
+      );
+
+      const { data, error } = await supabase
+        .from("mensagens_templates")
+        .select("id, texto")
+        .eq("loja", loja);
       if (error) {
         console.error("Erro ao carregar mensagens personalizadas:", error);
+        setTemplates(padroesDaLoja);
         return;
       }
+      const atualizado = { ...padroesDaLoja };
       if (data && data.length > 0) {
-        setTemplates(prev => {
-          const atualizado = { ...prev };
-          data.forEach((row: { id: string; texto: string }) => {
-            if (row.texto) atualizado[row.id] = row.texto;
-          });
-          return atualizado;
+        data.forEach((row: { id: string; texto: string }) => {
+          if (row.texto) atualizado[row.id] = row.texto;
         });
       }
+      setTemplates(atualizado);
     };
     carregarTemplates();
-  }, [session]);
+  }, [session, loja]);
 
   // Carrega as mensagens programadas (regras personalizadas por dias de receita)
   const carregarMensagensProgramadas = async () => {
     const { data, error } = await supabase
       .from("mensagens_programadas")
       .select("*")
+      .eq("loja", loja)
       .order("criado_em", { ascending: false });
     if (error) {
       console.error("Erro ao carregar mensagens programadas:", error);
@@ -301,7 +335,7 @@ export default function CRM() {
   useEffect(() => {
     if (!session) return;
     carregarMensagensProgramadas();
-  }, [session]);
+  }, [session, loja]);
 
   const criarMensagemProgramada = async () => {
     if (!isAdminMensagens) return;
@@ -348,6 +382,7 @@ export default function CRM() {
       dias_min: diasMin,
       dias_max: diasMax,
       ativo: true,
+      loja,
     }]);
     setSalvandoNovaMsg(false);
 
@@ -474,7 +509,8 @@ export default function CRM() {
 
   // Substitui as variáveis {{VAR}} de um template pelos valores reais
   const preencherTemplate = (id: string, vars: Record<string, string>) => {
-    let texto = templates[id] ?? (TEMPLATES_DEFINICAO.find(t => t.id === id)?.padrao || "");
+    const def = TEMPLATES_DEFINICAO.find(t => t.id === id);
+    let texto = templates[id] ?? (def ? textoComLoja(def.padrao, loja) : "");
     Object.entries(vars).forEach(([chave, valor]) => {
       texto = texto.split(`{{${chave}}}`).join(valor);
     });
@@ -487,8 +523,8 @@ export default function CRM() {
     if (texto === undefined) return;
     setTemplateSalvando(id);
     const { error } = await supabase.from("mensagens_templates").upsert(
-      { id, texto, updated_at: new Date().toISOString() },
-      { onConflict: "id" }
+      { id, texto, loja, updated_at: new Date().toISOString() },
+      { onConflict: "id,loja" }
     );
     setTemplateSalvando(null);
     if (error) {
@@ -503,7 +539,7 @@ export default function CRM() {
   const restaurarTemplatePadrao = (id: string) => {
     const def = TEMPLATES_DEFINICAO.find(t => t.id === id);
     if (!def) return;
-    setTemplatesRascunho(prev => ({ ...prev, [id]: def.padrao }));
+    setTemplatesRascunho(prev => ({ ...prev, [id]: textoComLoja(def.padrao, loja) }));
   };
 
   const excluirTemplatePersonalizado = async (id: string) => {
@@ -512,15 +548,15 @@ export default function CRM() {
     if (!def || !confirm(`Excluir a mensagem personalizada "${def.label}" e voltar ao texto padrão?`)) return;
 
     setTemplateExcluindo(id);
-    const { error } = await supabase.from("mensagens_templates").delete().eq("id", id);
+    const { error } = await supabase.from("mensagens_templates").delete().eq("id", id).eq("loja", loja);
     setTemplateExcluindo(null);
     if (error) {
       alert("Erro ao excluir a mensagem: " + error.message);
       return;
     }
 
-    setTemplates(prev => ({ ...prev, [id]: def.padrao }));
-    setTemplatesRascunho(prev => ({ ...prev, [id]: def.padrao }));
+    setTemplates(prev => ({ ...prev, [id]: textoComLoja(def.padrao, loja) }));
+    setTemplatesRascunho(prev => ({ ...prev, [id]: textoComLoja(def.padrao, loja) }));
     setTemplateSalvo(id);
     setTimeout(() => setTemplateSalvo(null), 2000);
   };
@@ -539,6 +575,7 @@ export default function CRM() {
         const { data, error } = await supabase
           .from("clientes")
           .select("*")
+          .eq("loja", loja)
           .range(de, ate);
 
         if (error) {
@@ -683,7 +720,7 @@ const statusData = todosStatus;
       if (lembretesData) setLembretes(lembretesData);
     }
     carregarDados();
-  }, [session]);
+  }, [session, loja]);
 
   const formatarData = (valor: string) => {
     const n = valor.replace(/\D/g, "").slice(0, 8);
@@ -722,6 +759,7 @@ const statusData = todosStatus;
       telefone,
       observacoes: observacoes || null,
       origem: origem || null,
+      loja,
     };
     if (editandoId) {
       const { error } = await supabase.from("clientes").update(payload).eq("id", editandoId);
@@ -1467,7 +1505,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
             <div className="flex justify-center mb-4">
               <img src="/logo.png" alt="Logo" style={{ width: '120px', height: '120px', objectFit: 'contain' }} />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">Ótica Líder CRM</h1>
+            <h1 className="text-2xl font-bold text-slate-900">CRM Óticas</h1>
             <p className="text-slate-500 mt-2">Faça login para acessar o sistema</p>
           </div>
           <Auth
@@ -1561,9 +1599,20 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Ótica Líder <span className="text-indigo-600">CRM</span></h1>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">{LOJAS[loja].nome} <span className="text-indigo-600">CRM</span></h1>
           </div>
           <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-full">
+              {Object.values(LOJAS).map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => trocarLoja(l.id)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${loja === l.id ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                >
+                  {l.nome}
+                </button>
+              ))}
+            </div>
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
               <span className="text-xs font-medium text-slate-600">{session.user.email}</span>
@@ -2173,8 +2222,8 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
               </div>
 
               {TEMPLATES_DEFINICAO.map((def) => {
-                const valorAtual = templatesRascunho[def.id] ?? templates[def.id] ?? def.padrao;
-                const alterado = valorAtual !== (templates[def.id] ?? def.padrao);
+                const valorAtual = templatesRascunho[def.id] ?? templates[def.id] ?? textoComLoja(def.padrao, loja);
+                const alterado = valorAtual !== (templates[def.id] ?? textoComLoja(def.padrao, loja));
                 return (
                   <div key={def.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                     <div className="flex items-start justify-between gap-4 mb-1 flex-wrap">
