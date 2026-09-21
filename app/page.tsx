@@ -655,6 +655,10 @@ const statusData = todosStatus;
   }
 
       // 2.5 Carregar Status da Promoção "Consulta Grátis" (tabela própria)
+      // A tabela histórica não possui coluna loja; filtramos pelos clientes
+      // atualmente carregados para impedir que Líder e Design compartilhem
+      // os status das checkboxes no contador.
+      const idsClientesDaLoja = new Set(todosClientes.map((cliente) => cliente.id));
       let todosPromo: any[] = [];
       let dePromo = 0;
       let atePromo = 999;
@@ -673,7 +677,7 @@ const statusData = todosStatus;
         }
 
         if (data && data.length > 0) {
-          todosPromo = [...todosPromo, ...data];
+          todosPromo = [...todosPromo, ...data.filter((item: any) => idsClientesDaLoja.has(item.cliente_id))];
           if (data.length < 1000) continuaPromo = false;
           else { dePromo += 1000; atePromo += 1000; }
         } else {
@@ -690,6 +694,9 @@ const statusData = todosStatus;
           };
         });
         setStatusPromo(novoStatusPromo);
+      } else {
+        // Ao trocar de loja, não manter o estado da loja anterior na tela.
+        setStatusPromo({});
       }
 
       // 3. Carregar respostas do histórico (última por cliente, ordenada por data)
@@ -847,6 +854,10 @@ const statusData = todosStatus;
     const dias = diasPassadosReceita(data);
     return dias !== null && dias >= 365;
   };
+
+  // Um cliente só entra na promoção enquanto a receita atual está vencida.
+  // Isso faz o numerador e o denominador acompanharem a edição da receita.
+  const isPromoReceitaElegivel = (data: string | null) => isReceitaVencidaTotal(data);
 
   // FUNÇÃO PARA FORMATAR TEMPO DECORRIDO
   const formatarTempoDecorrido = (dias: number): string => {
@@ -1221,10 +1232,7 @@ const statusData = todosStatus;
 });
 if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interessado");
     if (filtro === "interessados") f = f.filter((c) => respostas[c.id] === "interessado");
-    if (filtro === "promo_receita") f = f.filter((c) => {
-      const dias = diasPassadosReceita(c.receita);
-      return dias !== null && dias >= 365;
-    });
+    if (filtro === "promo_receita") f = f.filter((c) => isPromoReceitaElegivel(c.receita));
     if (filtro === "clientes_novos") f = f.filter((c) => !!c.origem);
     if (mensagemFiltroSelecionada) {
       f = f.filter(c => mensagensProgramadasDoCliente(c).some(m => m.id === mensagemFiltroSelecionada.id));
@@ -1449,10 +1457,7 @@ nao_contatados:    clientes.filter(c => {
   return !((env && (env.aniversarioNoDia || env.receitaNoDia)) || (ind && (ind.aniversarioMes || ind.receitaAntecipada)));
 }).length,
 interessados:      Object.values(respostas).filter(r => r === "interessado").length,
-      promo_receita:     clientes.filter(c => {
-        const dias = diasPassadosReceita(c.receita);
-        return dias !== null && dias >= 365;
-      }).length,
+      promo_receita:     clientes.filter(c => isPromoReceitaElegivel(c.receita)).length,
       ...Object.fromEntries(
         mensagensProgramadas.filter(m => m.ativo).map(m => [
           `mensagem_${m.id}`,
@@ -1464,15 +1469,15 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
 
   // CONTADOR DA PROMOÇÃO "CONSULTA GRÁTIS" (contatados / elegíveis)
   const promoElegiveisCount = useMemo(() => {
-    return clientes.filter(c => {
-      const dias = diasPassadosReceita(c.receita);
-      return dias !== null && dias >= 365;
-    }).length;
+    return clientes.filter(c => isPromoReceitaElegivel(c.receita)).length;
   }, [clientes]);
 
   const promoContatadosCount = useMemo(() => {
-    return Object.values(statusPromo).filter(s => s.enviado).length;
-  }, [statusPromo]);
+    // Conta somente checkboxes marcadas de clientes que ainda estão na lista
+    // elegível da loja ativa. Se a receita for atualizada, o cliente sai dos
+    // dois números simultaneamente.
+    return clientes.filter(c => isPromoReceitaElegivel(c.receita) && statusPromo[c.id]?.enviado).length;
+  }, [clientes, statusPromo]);
 
   // ICONE WHATSAPP VERDE
   const WhatsAppIcon = () => (
