@@ -205,6 +205,7 @@ export default function CRM() {
     dias_min: number | null;
     dias_max: number | null;
     ativo: boolean;
+    destaque?: boolean | null;
   };
   const [mensagensProgramadas, setMensagensProgramadas] = useState<MensagemProgramada[]>([]);
   const [mostrarFormNovaMsg, setMostrarFormNovaMsg] = useState(false);
@@ -221,6 +222,7 @@ export default function CRM() {
   const [mensagensProgramadasRascunho, setMensagensProgramadasRascunho] = useState<Record<string, string>>({});
   const [mensagemProgramadaSalvandoId, setMensagemProgramadaSalvandoId] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [salvandoDestaque, setSalvandoDestaque] = useState(false);
 
   // Paginação
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -424,6 +426,34 @@ export default function CRM() {
     setMensagensProgramadas(prev => prev.map(item => item.id === m.id ? { ...item, texto } : item));
   };
 
+  // Define qual mensagem aparece como card principal do Dashboard (só o admin). id = null volta para "Promo Receita Vencida".
+  const definirDestaque = async (id: string | null) => {
+    if (!isAdminMensagens) return;
+    setSalvandoDestaque(true);
+    const { error: erroLimpar } = await supabase
+      .from("mensagens_programadas")
+      .update({ destaque: false })
+      .eq("loja", loja);
+    if (erroLimpar) {
+      setSalvandoDestaque(false);
+      alert("Erro ao alterar a promoção em destaque: " + erroLimpar.message);
+      return;
+    }
+    if (id) {
+      const { error: erroMarcar } = await supabase
+        .from("mensagens_programadas")
+        .update({ destaque: true })
+        .eq("id", id);
+      if (erroMarcar) {
+        setSalvandoDestaque(false);
+        alert("Erro ao alterar a promoção em destaque: " + erroMarcar.message);
+        return;
+      }
+    }
+    setMensagensProgramadas(prev => prev.map(m => ({ ...m, destaque: id !== null && m.id === id })));
+    setSalvandoDestaque(false);
+  };
+
   const excluirMensagemProgramada = async (id: string) => {
     setExcluindoMsgId(id);
     const { error } = await supabase.from("mensagens_programadas").delete().eq("id", id);
@@ -492,6 +522,11 @@ export default function CRM() {
   const mensagemFiltroSelecionada = mensagensProgramadas.find(
     m => filtro.startsWith("mensagem_") && m.id === filtro.slice("mensagem_".length) && m.ativo
   ) || null;
+
+  // Promoção que o admin escolheu para ficar no card principal do Dashboard
+  const mensagemDestaque = mensagensProgramadas.find(m => m.ativo && m.destaque) || null;
+  // Mensagem para "todos os clientes" (promoções gerais, ex: Black Friday): todos ganham checkbox
+  const mensagemTodos = !!mensagemFiltroSelecionada && tipoCondicaoEfetivo(mensagemFiltroSelecionada) === "todos";
 
   useEffect(() => {
     if (filtro.startsWith("mensagem_") && !mensagemFiltroSelecionada) {
@@ -1479,6 +1514,24 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
     return clientes.filter(c => isPromoReceitaElegivel(c.receita) && statusPromo[c.id]?.enviado).length;
   }, [clientes, statusPromo]);
 
+  // CONTADOR DO CARD EM DESTAQUE (contatados / público da mensagem)
+  const destaqueElegiveisCount = useMemo(() => {
+    if (!mensagemDestaque) return 0;
+    return clientes.filter(c => mensagensProgramadasDoCliente(c).some(m => m.id === mensagemDestaque.id)).length;
+  }, [clientes, mensagemDestaque, mensagensProgramadas]);
+
+  const destaqueContatadosCount = useMemo(() => {
+    if (!mensagemDestaque) return 0;
+    const todos = tipoCondicaoEfetivo(mensagemDestaque) === "todos";
+    return clientes.filter(c => {
+      if (!mensagensProgramadasDoCliente(c).some(m => m.id === mensagemDestaque.id)) return false;
+      const env = statusEnvio[c.id];
+      const ind = statusEnvioIndependente[c.id];
+      if (todos) return !!ind?.receitaAntecipada;
+      return !!((env && (env.aniversarioNoDia || env.receitaNoDia)) || (ind && (ind.aniversarioMes || ind.receitaAntecipada)));
+    }).length;
+  }, [clientes, mensagemDestaque, mensagensProgramadas, statusEnvio, statusEnvioIndependente]);
+
   // ICONE WHATSAPP VERDE
   const WhatsAppIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1694,6 +1747,15 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                     <p className="text-[10px] text-violet-500 font-semibold mt-0.5">Ver por origem →</p>
                   </div>
                 </button>
+                {mensagemDestaque ? (
+                  <button onClick={() => { setFiltro(`mensagem_${mensagemDestaque.id}`); setAbaAtiva("clientes"); }} className="bg-white p-5 rounded-xl shadow-sm border border-red-100 flex items-center gap-4 hover:border-red-300 hover:shadow-md transition-all text-left w-full">
+                    <div className="w-11 h-11 bg-red-50 rounded-full flex items-center justify-center text-red-600 text-lg shrink-0">💥</div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold text-red-500 uppercase tracking-wide truncate">{mensagemDestaque.nome}</p>
+                      <p className="text-2xl font-black text-red-600">{destaqueContatadosCount}/{destaqueElegiveisCount}</p>
+                    </div>
+                  </button>
+                ) : (
                 <button onClick={() => { setFiltro("promo_receita"); setAbaAtiva("clientes"); }} className="bg-white p-5 rounded-xl shadow-sm border border-red-100 flex items-center gap-4 hover:border-red-300 hover:shadow-md transition-all text-left w-full">
                   <div className="w-11 h-11 bg-red-50 rounded-full flex items-center justify-center text-red-600 text-lg shrink-0">💥</div>
                   <div>
@@ -1701,6 +1763,7 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                     <p className="text-2xl font-black text-red-600">{promoContatadosCount}/{promoElegiveisCount}</p>
                   </div>
                 </button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1993,13 +2056,13 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
                       {/* MÊS — MUDANÇA: accent-emerald-500 (era accent-indigo-500) e accent-red-500 (era accent-orange-500) */}
                       <div className="col-span-1 flex flex-col gap-2 items-center pt-1">
                         {anivMes && <input type="checkbox" checked={statusInd.aniversarioMes} onChange={() => marcarEnviadoIndependente(c.id, "aniversarioMes")} className="w-4 h-4 cursor-pointer accent-emerald-500" title="🎉 Controle Aniversário do Mês" />}
-                        {(recAnt || recVencida) && <input type="checkbox" checked={statusInd.receitaAntecipada} onChange={() => marcarEnviadoIndependente(c.id, "receitaAntecipada")} className="w-4 h-4 cursor-pointer accent-red-500" title="📄 Controle Receita" />}
+                        {(recAnt || recVencida || mensagemTodos) && <input type="checkbox" checked={statusInd.receitaAntecipada} onChange={() => marcarEnviadoIndependente(c.id, "receitaAntecipada")} className="w-4 h-4 cursor-pointer accent-red-500" title="📄 Controle Receita" />}
                       </div>
 
                       {/* CLIENTE */}
                       <div className="col-span-3 min-w-0">
                         {(() => {
-                          const cortado = (anivHoje && status.aniversarioNoDia) || (recHoje && status.receitaNoDia) || ((recVencida || recAnt) && statusInd.receitaAntecipada) || (anivMes && statusInd.aniversarioMes);
+                          const cortado = (mensagemTodos && statusInd.receitaAntecipada) || (anivHoje && status.aniversarioNoDia) || (recHoje && status.receitaNoDia) || ((recVencida || recAnt) && statusInd.receitaAntecipada) || (anivMes && statusInd.aniversarioMes);
                           const palavras = c.nome.split(" ");
                           const metade = Math.ceil(palavras.length / 2);
                           return (<>
@@ -2287,6 +2350,28 @@ interessados:      Object.values(respostas).filter(r => r === "interessado").len
               {renderCartoesMensagensProgramadas()}
 
               {/* MENSAGENS PROGRAMADAS (cabeçalho e criação) */}
+              <div className="bg-white rounded-xl shadow-sm border border-red-100 p-6 mt-8">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-1"><span className="w-1.5 h-6 bg-red-500 rounded-full"></span> 💥 Promoção em destaque no Dashboard</h3>
+                <p className="text-sm text-slate-500 mb-4 max-w-2xl">
+                  Escolha qual promoção aparece no card principal do Dashboard (onde hoje aparece "Promo Receita Vencida"). Só você vê esta opção — as funcionárias apenas clicam no card.
+                </p>
+                <div className="relative max-w-md">
+                  <select
+                    value={mensagemDestaque?.id ?? ""}
+                    disabled={salvandoDestaque}
+                    onChange={(e) => definirDestaque(e.target.value || null)}
+                    className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg pl-4 pr-10 py-2 text-sm font-medium focus:ring-2 focus:ring-red-400 outline-none disabled:opacity-60"
+                  >
+                    <option value="">💥 Promo Receita Vencida (padrão)</option>
+                    {mensagensProgramadas.filter(m => m.ativo).map(m => (
+                      <option key={m.id} value={m.id}>💬 {m.nome}</option>
+                    ))}
+                  </select>
+                  <svg className="pointer-events-none absolute right-3 top-3 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                {salvandoDestaque && <p className="text-xs text-slate-400 mt-2">Salvando...</p>}
+              </div>
+
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mt-8">
                 <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
                   <div>
